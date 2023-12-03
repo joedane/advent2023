@@ -5,10 +5,11 @@ pub(crate) fn get_runs() -> Vec<Box<dyn PuzzleRun>> {
     vec![Box::new(Part2)]
 }
 
+#[allow(dead_code)]
 struct Part1;
 
 impl Part1 {
-    fn extract(line: &str) -> anyhow::Result<u32> {
+    fn _extract(line: &str) -> anyhow::Result<u32> {
         Ok(10
             * line
                 .chars()
@@ -102,7 +103,7 @@ impl Part2 {
 
         let bw = {
             let mut i = bytes.len() - 1;
-            let mut val: Option<u8> = None;
+            let val: Option<u8>;
             loop {
                 if bytes[i].is_ascii_digit() {
                     val = Some(bytes[i] - 48);

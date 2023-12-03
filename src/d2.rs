@@ -6,7 +6,7 @@ use nom::{
     combinator::{map, map_res},
     multi::separated_list1,
     sequence::{delimited, pair},
-    Finish, IResult, Parser,
+    Finish, IResult,
 };
 use std::collections::HashMap;
 
@@ -18,9 +18,9 @@ struct Part1;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum Color {
-    RED,
-    GREEN,
-    BLUE,
+    Red,
+    Green,
+    Blue,
 }
 
 impl std::str::FromStr for Color {
@@ -28,9 +28,9 @@ impl std::str::FromStr for Color {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "red" => Ok(Color::RED),
-            "green" => Ok(Color::GREEN),
-            "blue" => Ok(Color::BLUE),
+            "red" => Ok(Color::Red),
+            "green" => Ok(Color::Green),
+            "blue" => Ok(Color::Blue),
             _ => Err("invalid color"),
         }
     }
@@ -47,17 +47,17 @@ impl Draw {
         Self {
             reds: colors
                 .iter()
-                .find(|c| c.0 == Color::RED)
+                .find(|c| c.0 == Color::Red)
                 .map(|c| c.1)
                 .unwrap_or(0),
             greens: colors
                 .iter()
-                .find(|c| c.0 == Color::GREEN)
+                .find(|c| c.0 == Color::Green)
                 .map(|c| c.1)
                 .unwrap_or(0),
             blues: colors
                 .iter()
-                .find(|c| c.0 == Color::BLUE)
+                .find(|c| c.0 == Color::Blue)
                 .map(|c| c.1)
                 .unwrap_or(0),
         }
@@ -82,13 +82,13 @@ impl Game {
 }
 #[derive(Debug)]
 struct GameParseError {
-    msg: String,
+    _msg: String,
 }
 
 impl From<nom::error::Error<&str>> for GameParseError {
     fn from(value: nom::error::Error<&str>) -> Self {
         GameParseError {
-            msg: value.to_string(),
+            _msg: value.to_string(),
         }
     }
 }
@@ -174,26 +174,26 @@ impl PuzzleRun for Part2 {
 
         for g in games {
             let mut maxes: HashMap<Color, u32> =
-                [(Color::RED, 0), (Color::GREEN, 0), (Color::BLUE, 0)].into();
+                [(Color::Red, 0), (Color::Green, 0), (Color::Blue, 0)].into();
             for d in g.draws {
-                let v = maxes.get(&Color::RED).unwrap();
+                let v = maxes.get(&Color::Red).unwrap();
                 if d.reds > *v {
-                    maxes.insert(Color::RED, d.reds);
+                    maxes.insert(Color::Red, d.reds);
                 }
 
-                let v = maxes.get(&Color::GREEN).unwrap();
+                let v = maxes.get(&Color::Green).unwrap();
                 if d.greens > *v {
-                    maxes.insert(Color::GREEN, d.greens);
+                    maxes.insert(Color::Green, d.greens);
                 }
 
-                let v = maxes.get(&Color::BLUE).unwrap();
+                let v = maxes.get(&Color::Blue).unwrap();
                 if d.blues > *v {
-                    maxes.insert(Color::BLUE, d.blues);
+                    maxes.insert(Color::Blue, d.blues);
                 }
             }
-            sum += (maxes.get(&Color::RED).unwrap()
-                * maxes.get(&Color::GREEN).unwrap()
-                * maxes.get(&Color::BLUE).unwrap());
+            sum += maxes.get(&Color::Red).unwrap()
+                * maxes.get(&Color::Green).unwrap()
+                * maxes.get(&Color::Blue).unwrap();
         }
         format!("{}", sum)
     }
