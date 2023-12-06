@@ -3,6 +3,11 @@ use std::path::Path;
 
 mod d1;
 mod d2;
+mod d3;
+mod d4;
+mod d5;
+mod d6;
+mod d7;
 
 pub trait PuzzleRun {
     fn input_data(&self) -> anyhow::Result<&str>;
@@ -29,6 +34,11 @@ struct Args {
 enum PuzzleDay {
     Day1,
     Day2,
+    Day3,
+    Day4,
+    Day5,
+    Day6,
+    Day7,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -39,6 +49,11 @@ fn main() -> anyhow::Result<()> {
     let puzzles = match args.day {
         Some(PuzzleDay::Day1) => d1::get_runs(),
         Some(PuzzleDay::Day2) => d2::get_runs(),
+        Some(PuzzleDay::Day3) => d3::get_runs(),
+        Some(PuzzleDay::Day4) => d4::get_runs(),
+        Some(PuzzleDay::Day5) => d5::get_runs(),
+        Some(PuzzleDay::Day6) => d6::get_runs(),
+        Some(PuzzleDay::Day7) => d7::get_runs(),
         _ => {
             println!("not found: {:?}", args.day);
             panic!()
