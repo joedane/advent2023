@@ -2,12 +2,15 @@ use clap::{Parser, Subcommand};
 use std::path::Path;
 
 mod d1;
+mod d10;
 mod d2;
 mod d3;
 mod d4;
 mod d5;
 mod d6;
 mod d7;
+mod d8;
+mod d9;
 
 pub trait PuzzleRun {
     fn input_data(&self) -> anyhow::Result<&str>;
@@ -39,6 +42,9 @@ enum PuzzleDay {
     Day5,
     Day6,
     Day7,
+    Day8,
+    Day9,
+    Day10,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -54,6 +60,9 @@ fn main() -> anyhow::Result<()> {
         Some(PuzzleDay::Day5) => d5::get_runs(),
         Some(PuzzleDay::Day6) => d6::get_runs(),
         Some(PuzzleDay::Day7) => d7::get_runs(),
+        Some(PuzzleDay::Day8) => d8::get_runs(),
+        Some(PuzzleDay::Day9) => d9::get_runs(),
+        Some(PuzzleDay::Day10) => d10::get_runs(),
         _ => {
             println!("not found: {:?}", args.day);
             panic!()
