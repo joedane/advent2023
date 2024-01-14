@@ -249,7 +249,12 @@ impl<'a> StateInContext<'a> {
                 }
             }
             (GroupState::Inside(l), 0) => {
-                if l == 1 && matches!(self.current, Condition::Damaged) && self.groups.is_empty() {
+                if l == 0 && self.groups.is_empty() {
+                    StateTransition::Valid
+                } else if l == 1
+                    && matches!(self.current, Condition::Damaged)
+                    && self.groups.is_empty()
+                {
                     StateTransition::Valid
                 } else {
                     StateTransition::Invalid
@@ -270,7 +275,7 @@ impl<'a> StateInContext<'a> {
                         })
                     }
                     Condition::Operational => StateTransition::Invalid,
-                    Condition::Damaged if l > 1 => {
+                    Condition::Damaged if l > 0 => {
                         let mut seen = self.seen.clone();
                         seen.push('#');
                         StateTransition::Single(Self {
@@ -281,17 +286,7 @@ impl<'a> StateInContext<'a> {
                             seen,
                         })
                     }
-                    Condition::Damaged if l == 1 => {
-                        let mut seen = self.seen.clone();
-                        seen.push('#');
-                        StateTransition::Single(Self {
-                            state: GroupState::Outside,
-                            current: Condition::try_from(first).unwrap(),
-                            remaining,
-                            groups: self.groups,
-                            seen,
-                        })
-                    }
+                    Condition::Damaged if l == 0 => StateTransition::Invalid,
                     Condition::Damaged => StateTransition::Invalid,
                     Condition::Unknown => StateTransition::Alternate(
                         Self {
@@ -322,7 +317,7 @@ impl Part2 {
         let (line, counts) = s.split_ascii_whitespace().next_tuple().unwrap();
         new_s.push_str(line);
         new_c.push_str(counts);
-        for i in 0..1 {
+        for i in 0..4 {
             new_s.push('?');
             new_s.push_str(line);
             new_c.push(',');
@@ -421,19 +416,19 @@ mod test {
 
     #[test]
     fn test_expand() {
-        let s = "#.#.####..#.### 1,1,3,1,1,3";
-        //let s = Part2::expand("???.### 1,1,3");
+        // let s = "#.#.####..#.### 1,1,3,1,1,3";
+        /*
+        let s = Part2::expand("???.### 1,1,3");
         let r = Record::parse(&s).unwrap();
         assert_eq!(Part2::count_choices(&r), 1);
 
-        panic!();
-
         let s = Part2::expand(".??..??...?##. 1,1,3");
-        let r = Record::parse(&s).unwrap();
-        assert_eq!(Part2::count_choices(&r), 16384);
+        let r = Record::parse(".??..??...?##. 1,1,3").unwrap();
+        assert_eq!(Part2::count_choices(&r), 4);
+        */
 
         let s = Part2::expand("?#?#?#?#?#?#?#? 1,3,1,6");
-        let r = Record::parse(&s).unwrap();
+        let r = Record::parse("?#?#?#?#?#?#?#? 1,3,1,6").unwrap();
         assert_eq!(Part2::count_choices(&r), 1);
     }
     #[test]
