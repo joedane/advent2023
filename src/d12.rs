@@ -1,8 +1,10 @@
 use crate::{read_file, PuzzleRun};
 use itertools::Itertools;
+use std::collections::HashSet;
+use std::hash::Hash;
 
 pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
-    vec![Box::new(Part1)]
+    vec![Box::new(Part2)]
 }
 
 #[derive(Debug)]
@@ -13,7 +15,7 @@ struct Record {
     known_broken: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 enum Condition {
     Operational,
     Damaged,
@@ -157,19 +159,37 @@ impl Stateful for String {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 enum GroupState {
     Outside,
     Inside(u8),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq)]
 struct StateInContext<'a> {
     state: GroupState,
     current: Condition,
     remaining: &'a str,
     groups: &'a [u8],
     seen: String,
+}
+
+impl<'a> Hash for StateInContext<'a> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.state.hash(state);
+        self.current.hash(state);
+        self.remaining.hash(state);
+        self.groups.hash(state);
+    }
+}
+
+impl<'a> PartialEq for StateInContext<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.state == other.state
+            && self.current == other.current
+            && self.remaining == other.remaining
+            && self.groups == other.groups
+    }
 }
 
 #[derive(Debug)]
@@ -194,9 +214,46 @@ impl<'a> StateInContext<'a> {
     }
 
     fn next(self) -> StateTransition<'a> {
+        if matches!(self.current, Condition::Unknown) {
+            return StateTransition::Alternate(
+                Self {
+                    state: self.state,
+                    current: Condition::Damaged,
+                    remaining: self.remaining,
+                    groups: self.groups,
+                    seen: self.seen.clone(),
+                },
+                Self {
+                    state: self.state,
+                    current: Condition::Operational,
+                    remaining: self.remaining,
+                    groups: self.groups,
+                    seen: self.seen.clone(),
+                },
+            );
+        }
         match (self.state, self.remaining.len()) {
             (GroupState::Outside, 0) => {
-                if self.groups.is_empty() {
+                if self.groups.is_empty() && matches!(self.current, Condition::Operational) {
+                    let mut seen = self.seen.clone();
+                    seen.push(match self.current {
+                        Condition::Damaged => '#',
+                        Condition::Operational => '.',
+                        Condition::Unknown => panic!(),
+                    });
+                    //println!("valid from outside (l: {}):\t{}", seen.len(), seen);
+                    StateTransition::Valid
+                } else if self.groups.len() == 1
+                    && self.groups[0] == 1
+                    && matches!(self.current, Condition::Damaged)
+                {
+                    let mut seen = self.seen.clone();
+                    seen.push(match self.current {
+                        Condition::Damaged => '#',
+                        Condition::Operational => '.',
+                        Condition::Unknown => panic!(),
+                    });
+                    //println!("valid from outside (1) (l: {}):\t{}", seen.len(), seen);
                     StateTransition::Valid
                 } else {
                     StateTransition::Invalid
@@ -230,31 +287,33 @@ impl<'a> StateInContext<'a> {
                             seen,
                         })
                     }
-                    Condition::Unknown => StateTransition::Alternate(
-                        Self {
-                            state: GroupState::Outside,
-                            current: Condition::Damaged,
-                            remaining: self.remaining,
-                            groups: self.groups,
-                            seen: self.seen.clone(),
-                        },
-                        Self {
-                            state: GroupState::Outside,
-                            current: Condition::Operational,
-                            remaining: self.remaining,
-                            groups: self.groups,
-                            seen: self.seen.clone(),
-                        },
-                    ),
+                    Condition::Unknown => panic!(),
                 }
             }
             (GroupState::Inside(l), 0) => {
-                if l == 0 && self.groups.is_empty() {
+                if l == 0
+                    && self.groups.is_empty()
+                    && matches!(self.current, Condition::Operational)
+                {
+                    let mut seen = self.seen.clone();
+                    seen.push(match self.current {
+                        Condition::Damaged => '#',
+                        Condition::Operational => '.',
+                        Condition::Unknown => panic!(),
+                    });
+                    //println!("valid from inside (0) (l: {}):\t{}", seen.len(), seen);
                     StateTransition::Valid
                 } else if l == 1
                     && matches!(self.current, Condition::Damaged)
                     && self.groups.is_empty()
                 {
+                    let mut seen = self.seen.clone();
+                    seen.push(match self.current {
+                        Condition::Damaged => '#',
+                        Condition::Operational => '.',
+                        Condition::Unknown => panic!(),
+                    });
+                    //println!("valid from inside (1) (l: {}):\t{}", seen.len(), seen);
                     StateTransition::Valid
                 } else {
                     StateTransition::Invalid
@@ -288,22 +347,7 @@ impl<'a> StateInContext<'a> {
                     }
                     Condition::Damaged if l == 0 => StateTransition::Invalid,
                     Condition::Damaged => StateTransition::Invalid,
-                    Condition::Unknown => StateTransition::Alternate(
-                        Self {
-                            state: GroupState::Inside(l),
-                            current: Condition::Operational,
-                            remaining: self.remaining,
-                            groups: self.groups,
-                            seen: self.seen.clone(),
-                        },
-                        Self {
-                            state: GroupState::Inside(l),
-                            current: Condition::Damaged,
-                            remaining: self.remaining,
-                            groups: self.groups,
-                            seen: self.seen.clone(),
-                        },
-                    ),
+                    Condition::Unknown => panic!(),
                 }
             }
         }
@@ -337,6 +381,7 @@ impl Part2 {
         let mut states_to_visit: Vec<StateInContext> =
             vec![StateInContext::start(&r.line, &r.counts)];
         let mut completed: u32 = 0;
+        //        let mut cache: HashSet<StateInContext> = Default::default();
 
         'root: while let Some(mut this_state) = states_to_visit.pop() {
             loop {
@@ -362,12 +407,14 @@ impl Part2 {
 
 impl PuzzleRun for Part2 {
     fn input_data(&self) -> anyhow::Result<&str> {
-        Ok("???.### 1,1,3
+        read_file("input/day12.txt")
+        /* Ok("???.### 1,1,3
         .??..??...?##. 1,1,3
         ?#?#?#?#?#?#?#? 1,3,1,6
         ????.#...#... 4,1,1
         ????.######..#####. 1,6,5
         ?###???????? 3,2,1")
+        */
     }
 
     fn run(&self, input: &str) -> String {
@@ -417,19 +464,30 @@ mod test {
     #[test]
     fn test_expand() {
         // let s = "#.#.####..#.### 1,1,3,1,1,3";
-        /*
+
         let s = Part2::expand("???.### 1,1,3");
         let r = Record::parse(&s).unwrap();
         assert_eq!(Part2::count_choices(&r), 1);
 
         let s = Part2::expand(".??..??...?##. 1,1,3");
-        let r = Record::parse(".??..??...?##. 1,1,3").unwrap();
-        assert_eq!(Part2::count_choices(&r), 4);
-        */
+        let r = Record::parse(&s).unwrap();
+        assert_eq!(Part2::count_choices(&r), 16384);
 
         let s = Part2::expand("?#?#?#?#?#?#?#? 1,3,1,6");
-        let r = Record::parse("?#?#?#?#?#?#?#? 1,3,1,6").unwrap();
+        let r = Record::parse(&s).unwrap();
         assert_eq!(Part2::count_choices(&r), 1);
+
+        let s = Part2::expand("????.#...#... 4,1,1");
+        let r = Record::parse(&s).unwrap();
+        assert_eq!(Part2::count_choices(&r), 16);
+
+        let s = Part2::expand("????.######..#####. 1,6,5");
+        let r = Record::parse(&s).unwrap();
+        assert_eq!(Part2::count_choices(&r), 2500);
+
+        let s = Part2::expand("?###???????? 3,2,1");
+        let r = Record::parse(&s).unwrap();
+        assert_eq!(Part2::count_choices(&r), 506250);
     }
     #[test]
     fn test_part2() {
