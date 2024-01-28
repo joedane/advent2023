@@ -1,6 +1,5 @@
 use crate::{read_file, PuzzleRun};
 use bumpalo::{collections::Vec, Bump};
-use itertools::Itertools;
 use num::integer::lcm;
 
 use regex::Regex;

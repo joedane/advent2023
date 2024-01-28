@@ -43,7 +43,7 @@ impl Part1 {
             .enumerate()
             .filter_map(|(i, b)| if b == '?' { Some(i) } else { None })
             .collect();
-        let need_to_place: u32 = (r.total_broken - r.known_broken);
+        let need_to_place: u32 = r.total_broken - r.known_broken;
 
         Ok(indicies
             .iter()
@@ -270,7 +270,7 @@ impl<'a> StateInContext<'a> {
                             current: Condition::try_from(first).unwrap(),
                             remaining,
                             groups: self.groups,
-                            seen: seen,
+                            seen,
                         })
                     }
                     Condition::Damaged if self.groups.is_empty() => StateTransition::Invalid,

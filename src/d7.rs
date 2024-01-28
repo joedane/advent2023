@@ -47,7 +47,7 @@ impl<P: Part> Hand<P> {
 
 // cards must be sorted
 fn has_seq(cards: &[u8], len: usize, start: usize) -> Option<usize> {
-    for i in (start..cards.len() - len + 1) {
+    for i in start..cards.len() - len + 1 {
         if cards[i..(i + len)].iter().all_equal() {
             return Some(i + len);
         }

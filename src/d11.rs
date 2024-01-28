@@ -1,8 +1,5 @@
 use crate::{read_file, PuzzleRun};
-use std::{
-    collections::{BTreeSet, HashSet},
-    ops::RangeBounds,
-};
+use std::collections::{BTreeSet, HashSet};
 
 pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
     vec![Box::new(Part1)]
