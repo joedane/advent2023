@@ -5,6 +5,7 @@ mod d1;
 mod d10;
 mod d11;
 mod d12;
+mod d13;
 mod d2;
 mod d3;
 mod d4;
@@ -13,6 +14,9 @@ mod d6;
 mod d7;
 mod d8;
 mod d9;
+
+#[macro_use]
+extern crate lazy_static;
 
 pub trait PuzzleRun {
     fn input_data(&self) -> anyhow::Result<&str>;
@@ -49,6 +53,7 @@ enum PuzzleDay {
     Day10,
     Day11,
     Day12,
+    Day13,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -69,6 +74,7 @@ fn main() -> anyhow::Result<()> {
         Some(PuzzleDay::Day10) => d10::get_runs(),
         Some(PuzzleDay::Day11) => d11::get_runs(),
         Some(PuzzleDay::Day12) => d12::get_runs(),
+        Some(PuzzleDay::Day13) => d13::get_runs(),
         _ => {
             println!("not found: {:?}", args.day);
             panic!()
