@@ -7,11 +7,11 @@ pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
 struct Part1;
 
 impl Part1 {
-    fn find_symmetry(&self, data: &Data) -> Option<Symmetry> {
-        let h = data.len() / data.width;
+    fn find_symmetry(data: &Data) -> Option<Symmetry> {
+        let h = data.len() / data.width();
         let mut i = 0;
 
-        'select_col: while i < data.width - 1 {
+        'select_col: while i < data.width() - 1 {
             if data[(0, i)] == data[(0, i + 1)] {
                 for j in 1..h {
                     if data[(j, i)] != data[(j, i + 1)] {
@@ -20,7 +20,7 @@ impl Part1 {
                     }
                 }
                 let mut ii = 1;
-                while i >= ii && i + 1 + ii < data.width {
+                while i >= ii && i + 1 + ii < data.width() {
                     for j in 0..h {
                         if data[(j, i - ii)] != data[(j, i + 1 + ii)] {
                             i += 1;
@@ -36,7 +36,7 @@ impl Part1 {
         i = 0;
         'select_row: while i < h - 1 {
             if data[(i, 0)] == data[(i + 1, 0)] {
-                for j in 1..(data.width - 1) {
+                for j in 1..(data.width() - 1) {
                     if data[(i, j)] != data[(i + 1, j)] {
                         i += 1;
                         continue 'select_row;
@@ -44,7 +44,7 @@ impl Part1 {
                 }
                 let mut ii = 1;
                 while i >= ii && i + 1 + ii < h {
-                    for j in 0..data.width {
+                    for j in 0..data.width() {
                         if data[(i - ii, j)] != data[(i + 1 + ii, j)] {
                             i += 1;
                             continue 'select_row;
@@ -103,7 +103,7 @@ impl Symmetry {
 }
 struct Data {
     data: Vec<Material>,
-    width: usize,
+    _width: usize,
 }
 
 impl Data {
@@ -111,11 +111,22 @@ impl Data {
         if data.len() % width != 0 {
             panic!()
         }
-        Data { data, width }
+        Data {
+            data,
+            _width: width,
+        }
     }
 
     fn len(&self) -> usize {
         self.data.len()
+    }
+
+    fn width(&self) -> usize {
+        self._width
+    }
+
+    fn height(&self) -> usize {
+        self.data.len() / self._width
     }
 }
 impl std::str::FromStr for Data {
@@ -144,7 +155,7 @@ impl std::ops::Index<(usize, usize)> for Data {
     type Output = Material;
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
-        &self.data[index.0 * self.width + index.1]
+        &self.data[index.0 * self.width() + index.1]
     }
 }
 impl PuzzleRun for Part1 {
@@ -175,7 +186,7 @@ impl PuzzleRun for Part1 {
             .split_terminator("\n\n")
             .inspect(|s| println!("reading: {s}"))
             .map(|s| s.parse::<Data>().unwrap())
-            .map(|d| self.find_symmetry(&d).unwrap().value())
+            .map(|d| Part1::find_symmetry(&d).unwrap().value())
             .sum();
 
         format!("{}", v)
@@ -185,58 +196,45 @@ impl PuzzleRun for Part1 {
 struct Part2;
 
 impl Part2 {
-    fn find_symmetry(data: &Data, check_idx: usize) -> Option<Symmetry> {
-        let h = data.len() / data.width;
-
-        let mut i = 0;
-        let flip: Option<(Symmetry, usize, usize)> = None;
-
-        'select_col: while i < data.width - 1 {
-            if data[(check_idx, i)] == data[(check_idx, i + 1)] {
-                for j in 0..h {
-                    if data[(j, i)] != data[(j, i + 1)] {
-                        i += 1;
-                        continue 'select_col;
-                    }
-                }
-                let mut ii = 1;
-                while i >= ii && i + 1 + ii < data.width {
-                    for j in 0..h {
-                        if data[(j, i - ii)] != data[(j, i + 1 + ii)] {
-                            i += 1;
-                            continue 'select_col;
+    fn find_broken_symmetry(d: &Data) -> Result<Symmetry, &'static str> {
+        'col: for col in 1..d.width() {
+            let mut check = 0;
+            let sym_width = std::cmp::min(col, d.len() - col);
+            for row in 0..d.height() {
+                for i in 1..=sym_width {
+                    if d[(row, col - i)] != d[(row, col + i - 1)] {
+                        if check > 0 {
+                            continue 'col;
+                        } else {
+                            check += 1;
                         }
                     }
-                    ii += 1;
                 }
-                return Some(Symmetry::V(i));
             }
-            i += 1;
+            if check == 1 {
+                return Ok(Symmetry::V(col - 1));
+            }
         }
-        i = 0;
-        'select_row: while i < h - 1 {
-            if data[(i, check_idx)] == data[(i + 1, check_idx)] {
-                for j in 0..(data.width - 1) {
-                    if data[(i, j)] != data[(i + 1, j)] {
-                        i += 1;
-                        continue 'select_row;
-                    }
-                }
-                let mut ii = 1;
-                while i >= ii && i + 1 + ii < h {
-                    for j in 0..data.width {
-                        if data[(i - ii, j)] != data[(i + 1 + ii, j)] {
-                            i += 1;
-                            continue 'select_row;
+
+        'row: for row in 1..d.height() {
+            let mut check = 0;
+            let sym_width = std::cmp::min(row, d.height() - row);
+            for col in 0..d.width() {
+                for i in 1..=sym_width {
+                    if d[(row - i, col)] != d[(row + i - 1, col)] {
+                        if check > 0 {
+                            continue 'row;
+                        } else {
+                            check += 1;
                         }
                     }
-                    ii += 1;
                 }
-                return Some(Symmetry::H(i));
             }
-            i += 1;
+            if check == 1 {
+                return Ok(Symmetry::H(row - 1));
+            }
         }
-        None
+        Err("failed to find broken symmetry")
     }
 }
 
@@ -251,7 +249,7 @@ impl PuzzleRun for Part2 {
             .split_terminator("\n\n")
             .inspect(|s| println!("reading: {s}"))
             .map(|s| s.parse::<Data>().unwrap())
-            .map(|d| Part2::find_symmetry(&d, 0).unwrap().value())
+            .map(|d| Part2::find_broken_symmetry(&d).unwrap().value())
             .sum();
 
         format!("{}", v)
@@ -274,7 +272,7 @@ mod test {
         #.#.##.#.";
 
         let d: Data = s.parse().unwrap();
-        assert_eq!(d.width, 9);
+        assert_eq!(d.width(), 9);
     }
 
     #[test]
@@ -302,7 +300,7 @@ mod test {
         #.#.##.#.";
 
         let d: Data = s.parse().unwrap();
-        assert_eq!(Part1::find_symmetry(&Part1, &d), Some(Symmetry::V(4)))
+        assert_eq!(Part1::find_symmetry(&d), Some(Symmetry::V(4)))
     }
 
     #[test]
@@ -316,7 +314,7 @@ mod test {
         #....#..#";
 
         let d: Data = s.parse().unwrap();
-        assert_eq!(Part1::find_symmetry(&Part1, &d), Some(Symmetry::H(3)))
+        assert_eq!(Part1::find_symmetry(&d), Some(Symmetry::H(3)))
     }
 
     #[test]
@@ -338,7 +336,7 @@ mod test {
         ...##...#..";
 
         let d: Data = s.parse().unwrap();
-        assert_eq!(Part1::find_symmetry(&Part1, &d), Some(Symmetry::H(2)))
+        assert_eq!(Part1::find_symmetry(&d), Some(Symmetry::H(2)))
     }
 
     #[test]
@@ -346,6 +344,28 @@ mod test {
         println!("{}", Part1.run(Part1.input_data().unwrap()));
     }
 
+    #[test]
+    fn test_bs() {
+        let s = "...#...####...#..
+        .....##.##.##....
+        ##....######....#
+        ..#.##.#..#.##...
+        ##.###.####.###.#
+        ..###...##...###.
+        #####.##..##.####
+        #######....######
+        ###...#.##.#...##
+        ....###.##.###...
+        ##.####.##.####.#
+        ..###...##...###.
+        ##.#.##....##.#.#
+        ##..#.#....#.#..#
+        ##.###.#..#.###.#
+        ###.#...##...#.##
+        ..####.####.####.";
+        let d: Data = s.parse().unwrap();
+        assert_eq!(300, Part1::find_symmetry(&d).unwrap().value());
+    }
     #[test]
     fn test_part2() {
         println!("{}", Part2.run(Part2.input_data().unwrap()));
