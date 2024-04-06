@@ -184,7 +184,7 @@ impl PuzzleRun for Part1 {
         let v: u32 = input
             .trim()
             .split_terminator("\n\n")
-            .inspect(|s| println!("reading: {s}"))
+            //            .inspect(|s| println!("reading: {s}"))
             .map(|s| s.parse::<Data>().unwrap())
             .map(|d| Part1::find_symmetry(&d).unwrap().value())
             .sum();
@@ -199,7 +199,7 @@ impl Part2 {
     fn find_broken_symmetry(d: &Data) -> Result<Symmetry, &'static str> {
         'col: for col in 1..d.width() {
             let mut check = 0;
-            let sym_width = std::cmp::min(col, d.len() - col);
+            let sym_width = std::cmp::min(col, d.width() - col);
             for row in 0..d.height() {
                 for i in 1..=sym_width {
                     if d[(row, col - i)] != d[(row, col + i - 1)] {
@@ -247,7 +247,7 @@ impl PuzzleRun for Part2 {
         let v: u32 = input
             .trim()
             .split_terminator("\n\n")
-            .inspect(|s| println!("reading: {s}"))
+            //  .inspect(|s| println!("reading: {s}"))
             .map(|s| s.parse::<Data>().unwrap())
             .map(|d| Part2::find_broken_symmetry(&d).unwrap().value())
             .sum();
@@ -364,7 +364,8 @@ mod test {
         ###.#...##...#.##
         ..####.####.####.";
         let d: Data = s.parse().unwrap();
-        assert_eq!(300, Part1::find_symmetry(&d).unwrap().value());
+        //println!("{:?}", Part1::find_symmetry(&d).unwrap());
+        assert_eq!(9, Part2::find_broken_symmetry(&d).unwrap().value());
     }
     #[test]
     fn test_part2() {
