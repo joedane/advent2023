@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use std::path::Path;
+use std::{fmt::Display, path::Path};
 
 mod d1;
 mod d10;
@@ -8,6 +8,7 @@ mod d12;
 mod d13;
 mod d14;
 mod d15;
+mod d16;
 mod d2;
 mod d3;
 mod d4;
@@ -58,6 +59,7 @@ enum PuzzleDay {
     Day13,
     Day14,
     Day15,
+    Day16,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -81,6 +83,7 @@ fn main() -> anyhow::Result<()> {
         Some(PuzzleDay::Day13) => d13::get_runs(),
         Some(PuzzleDay::Day14) => d14::get_runs(),
         Some(PuzzleDay::Day15) => d15::get_runs(),
+        Some(PuzzleDay::Day16) => d16::get_runs(),
         _ => {
             println!("not found: {:?}", args.day);
             panic!()
@@ -91,4 +94,147 @@ fn main() -> anyhow::Result<()> {
         println!("{}", puzzle.run(puzzle.input_data()?));
     }
     Ok(())
+}
+
+struct Grid<T> {
+    data: Box<[T]>,
+    width: usize,
+    height: usize,
+}
+
+impl<T> Clone for Grid<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            data: self.data.clone(),
+            width: self.width.clone(),
+            height: self.height.clone(),
+        }
+    }
+}
+impl<T> Grid<T>
+where
+    T: From<char>,
+{
+    fn new(input: &str) -> Self {
+        let mut v: Vec<T> = Default::default();
+        let mut width = 0;
+        for line in input.lines().map(str::trim) {
+            let mut w = 0;
+            for c in line.chars() {
+                v.push(c.into());
+                w += 1;
+            }
+            width = w;
+        }
+        Grid {
+            height: v.len() / width,
+            data: v.into_boxed_slice(),
+            width,
+        }
+    }
+}
+
+impl<T> Grid<T> {
+    fn get(&self, x: usize, y: usize) -> &T {
+        &self.data[self.coord(x, y)]
+    }
+
+    fn get_mut(&mut self, x: usize, y: usize) -> &mut T {
+        &mut self.data[self.coord(x, y)]
+    }
+
+    fn from_coord(&self, coord: usize) -> (usize, usize) {
+        (coord / self.width, coord % self.width)
+    }
+
+    fn coord(&self, x: usize, y: usize) -> usize {
+        y * self.width + x
+    }
+}
+
+impl<T> Grid<T> {
+    fn fmt<F>(&self, f: &mut std::fmt::Formatter<'_>, conv: F) -> std::fmt::Result
+    where
+        F: Fn(&T) -> char,
+    {
+        let mut s = format!("Grid ({} by {}):\n", self.width, self.height);
+        for row in 0..self.height {
+            for col in 0..self.width {
+                s.push(conv(self.get(col, row)));
+            }
+            s.push('\n');
+        }
+        s.push('\n');
+        write!(f, "{}", s)
+    }
+}
+impl<T> Display for Grid<T>
+where
+    char: for<'a> From<&'a T>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt(f, |i| i.into())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Dir {
+    N,
+    S,
+    E,
+    W,
+}
+
+impl<T> Grid<T> {
+    fn count_cells<F>(&self, f: F) -> usize
+    where
+        F: Fn(&T) -> bool,
+    {
+        self.data.iter().filter(|&i| f(i)).count()
+    }
+    fn try_next_coord(&self, x: usize, y: usize, dir: Dir) -> Option<(usize, usize)> {
+        match dir {
+            Dir::E => {
+                if x + 1 < self.width {
+                    Some((x + 1, y))
+                } else {
+                    None
+                }
+            }
+            Dir::W => {
+                if x > 0 {
+                    Some((x - 1, y))
+                } else {
+                    None
+                }
+            }
+            Dir::N => {
+                if y > 0 {
+                    Some((x, y - 1))
+                } else {
+                    None
+                }
+            }
+            Dir::S => {
+                if y + 1 < self.height {
+                    Some((x, y + 1))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn try_next(&self, x: usize, y: usize, dir: Dir) -> Option<&T> {
+        self.try_next_coord(x, y, dir)
+            .and_then(|(x, y)| Some(self.get(x, y)))
+    }
+
+    fn try_next_mut(&mut self, x: usize, y: usize, dir: Dir) -> Option<&mut T> {
+        self.try_next_coord(x, y, dir)
+            .and_then(|(x, y)| Some(self.get_mut(x, y)))
+    }
 }
