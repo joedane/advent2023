@@ -9,6 +9,7 @@ mod d13;
 mod d14;
 mod d15;
 mod d16;
+mod d17;
 mod d2;
 mod d3;
 mod d4;
@@ -158,12 +159,12 @@ impl<T> Grid<T> {
 impl<T> Grid<T> {
     fn fmt<F>(&self, f: &mut std::fmt::Formatter<'_>, conv: F) -> std::fmt::Result
     where
-        F: Fn(&T) -> char,
+        F: Fn(&T) -> &str,
     {
         let mut s = format!("Grid ({} by {}):\n", self.width, self.height);
         for row in 0..self.height {
             for col in 0..self.width {
-                s.push(conv(self.get(col, row)));
+                s.push_str(conv(self.get(col, row)));
             }
             s.push('\n');
         }
@@ -171,6 +172,7 @@ impl<T> Grid<T> {
         write!(f, "{}", s)
     }
 }
+/*
 impl<T> Display for Grid<T>
 where
     char: for<'a> From<&'a T>,
@@ -179,8 +181,8 @@ where
         self.fmt(f, |i| i.into())
     }
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+*/
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Dir {
     N,
     S,
@@ -194,6 +196,26 @@ impl<T> Grid<T> {
         F: Fn(&T) -> bool,
     {
         self.data.iter().filter(|&i| f(i)).count()
+    }
+
+    /**
+     * Dir in the return tuple is the direction from which we'll move
+     */
+    fn cardinal_neighbors(&self, x: usize, y: usize) -> Vec<(usize, usize, Dir)> {
+        let mut v = vec![];
+        if let Some(next) = self.try_next_coord(x, y, Dir::N) {
+            v.push((next.0, next.1, Dir::S));
+        }
+        if let Some(next) = self.try_next_coord(x, y, Dir::S) {
+            v.push((next.0, next.1, Dir::N));
+        }
+        if let Some(next) = self.try_next_coord(x, y, Dir::E) {
+            v.push((next.0, next.1, Dir::W));
+        }
+        if let Some(next) = self.try_next_coord(x, y, Dir::W) {
+            v.push((next.0, next.1, Dir::E));
+        }
+        v
     }
     fn try_next_coord(&self, x: usize, y: usize, dir: Dir) -> Option<(usize, usize)> {
         match dir {

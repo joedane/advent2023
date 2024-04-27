@@ -105,6 +105,7 @@ impl RayState {
 
 struct DebugGrid<'a, T>(&'a Grid<T>);
 
+/*
 impl<'a> Display for DebugGrid<'a, Cell> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Grid::fmt(&self.0, f, |c| {
@@ -118,6 +119,7 @@ impl<'a> Display for DebugGrid<'a, Cell> {
         })
     }
 }
+*/
 
 fn score(grid: &Grid<Cell>, start: RayState) -> usize {
     let mut grid = grid.clone();
