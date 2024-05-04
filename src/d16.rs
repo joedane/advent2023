@@ -1,7 +1,11 @@
 use itertools::Itertools;
-use std::fmt::{Display, Write};
+use std::{
+    fmt::{Display, Write},
+    str::FromStr,
+};
 
-use super::{read_file, Dir, Grid, PuzzleRun};
+use super::{read_file, PuzzleRun};
+use crate::grid::{Dir, Grid};
 
 pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
     vec![Box::new(Part2)]
@@ -29,6 +33,17 @@ impl From<Symbol> for char {
         }
     }
 }
+impl From<Symbol> for u8 {
+    fn from(value: Symbol) -> Self {
+        match value {
+            Symbol::None => b'.',
+            Symbol::Pipe => b'|',
+            Symbol::Dash => b'-',
+            Symbol::Slash => b'/',
+            Symbol::Backslash => b'\\',
+        }
+    }
+}
 impl From<&Cell> for char {
     fn from(value: &Cell) -> Self {
         value.symbol.into()
@@ -42,6 +57,18 @@ impl From<char> for Symbol {
             '-' => Self::Dash,
             '/' => Self::Slash,
             '\\' => Self::Backslash,
+            _ => panic!(),
+        }
+    }
+}
+impl From<u8> for Symbol {
+    fn from(value: u8) -> Self {
+        match value {
+            b'.' => Self::None,
+            b'|' => Self::Pipe,
+            b'-' => Self::Dash,
+            b'/' => Self::Slash,
+            b'\\' => Self::Backslash,
             _ => panic!(),
         }
     }
@@ -72,6 +99,11 @@ impl Cell {
 
 impl From<char> for Cell {
     fn from(value: char) -> Self {
+        Cell::new(value.into())
+    }
+}
+impl From<u8> for Cell {
+    fn from(value: u8) -> Self {
         Cell::new(value.into())
     }
 }
@@ -155,7 +187,7 @@ fn score(grid: &Grid<Cell>, start: RayState) -> usize {
                 }
             };
             let next = grid.try_next_coord(current.x, current.y, next_dir);
-            if let Some((next_x, next_y)) = next {
+            if let Some((next_x, next_y, _)) = next {
                 if grid.get(next_x, next_y).was_visited_from(next_dir) {
                     continue 'stack;
                 } else {
@@ -186,7 +218,7 @@ impl PuzzleRun for Part1 {
     }
 
     fn run(&self, input: &str) -> String {
-        let mut grid: Grid<Cell> = Grid::new(input);
+        let mut grid: Grid<Cell> = Grid::from_str(input).unwrap();
         format!("{}", score(&grid, RayState::start()))
     }
 }
@@ -211,7 +243,7 @@ impl PuzzleRun for Part2 {
     }
 
     fn run(&self, input: &str) -> String {
-        let mut grid: Grid<Cell> = Grid::new(input);
+        let mut grid: Grid<Cell> = Grid::from_str(input).unwrap();
         let max = (0..grid.width)
             .cartesian_product([Dir::N, Dir::S])
             .chain((0..grid.height).cartesian_product([Dir::E, Dir::W]))

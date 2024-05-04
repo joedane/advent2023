@@ -1,4 +1,12 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    cell::{Ref, RefCell},
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    ops::{Add, AddAssign},
+    str::FromStr,
+};
+
+use num_traits::Zero;
 
 use petgraph::{
     algo::dijkstra,
@@ -9,7 +17,8 @@ use petgraph::{
     Graph,
 };
 
-use super::{read_file, Dir, Grid, PuzzleRun};
+use super::{read_file, PuzzleRun};
+use crate::grid::{Dir, Grid};
 
 pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
     vec![Box::new(Part1)]
@@ -17,6 +26,7 @@ pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
 
 struct Part1;
 
+/*
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 struct MyU8(u8);
 
@@ -27,83 +37,132 @@ impl From<char> for MyU8 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-struct MyEdgeId {
-    source: MyNodeId,
-    //    dir: Dir,
-    target: MyNodeId,
+impl AddAssign<MyU8> for MyU8 {
+    fn add_assign(&mut self, rhs: MyU8) {
+        self.0 += rhs.0;
+    }
+}
+*/
+
+/*
+struct MyGraph {
+    grid: Grid<MyU8>,
+    nodes: RefCell<SlotMap<DefaultKey, MyNode>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-struct MyNodeId {
+impl MyGraph {
+    fn new(grid: Grid<MyU8>) -> Self {
+        Self {
+            grid,
+            nodes: Default::default(),
+        }
+    }
+
+    fn add_node(&mut self, node: MyNode) -> DefaultKey {
+        self.nodes.borrow_mut().insert(node)
+    }
+
+    fn get_node(&self, key: DefaultKey) -> MyNode {
+        self.nodes.borrow().get(key).unwrap().clone()
+    }
+
+    fn get_node_weight(&self, key: DefaultKey) -> u32 {
+        let n = self.get_node(key);
+        self.grid.get(n.x, n.y).0.into()
+    }
+    fn width(&self) -> usize {
+        self.grid.width
+    }
+
+    fn height(&self) -> usize {
+        self.grid.height
+    }
+
+    fn edges(&self, node_key: DefaultKey) -> MyEdgesType {
+    }
+}
+
+*/
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct MyEdgeId<T> {
+    source: MyNode,
+    target: MyNode,
+    weight: T,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
+pub struct MyNode {
     x: usize,
     y: usize,
-    cnt: u8,
     dir: Dir,
 }
 
-impl MyNodeId {
-    fn new(x: usize, y: usize, cnt: u8, dir: Dir) -> Self {
-        Self { x, y, cnt, dir }
+impl MyNode {
+    fn new(x: usize, y: usize, dir: Dir) -> Self {
+        Self { x, y, dir }
     }
 }
-impl GraphBase for Grid<MyU8> {
+impl<T: Copy + PartialEq> GraphBase for Grid<T> {
     #[doc = r" edge identifier"]
-    type EdgeId = MyEdgeId;
+    type EdgeId = MyEdgeId<T>;
 
     #[doc = r" node identifier"]
-    type NodeId = MyNodeId;
+    type NodeId = MyNode;
 }
 
-struct MyEdgesType(std::vec::IntoIter<MyEdgeRef>);
+pub struct MyEdgesType<T>(std::vec::IntoIter<MyEdgeRef<T>>);
 
-impl Iterator for MyEdgesType {
-    type Item = MyEdgeRef;
+impl<T> Iterator for MyEdgesType<T> {
+    type Item = MyEdgeRef<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
     }
 }
-impl IntoEdges for &Grid<MyU8> {
-    type Edges = MyEdgesType;
+impl<T> IntoEdges for &Grid<T>
+where
+    T: Copy + PartialEq + AddAssign<T> + Add<Output = T> + Zero,
+{
+    type Edges = MyEdgesType<T>;
 
     fn edges(self, a: Self::NodeId) -> Self::Edges {
-        let mut v: Vec<MyEdgeRef> = self
-            .cardinal_neighbors(a.x, a.y)
+        let mut v: Vec<MyEdgeRef<T>> = self
+            .cardinal_neighbors(a.x, a.y, 2)
             .into_iter()
-            .filter_map(|e| {
-                if e.2 == a.dir {
-                    if a.cnt == 0 {
-                        None
-                    } else {
-                        Some(MyEdgeRef(MyEdgeId {
-                            source: a.clone(),
-                            target: MyNodeId::new(e.0, e.1, a.cnt - 1, e.2),
-                        }))
-                    }
-                } else {
-                    Some(MyEdgeRef(MyEdgeId {
+            .filter_map(|(this_x, this_y, this_dir, this_weight)| match a.dir {
+                Dir::N | Dir::S => match this_dir {
+                    Dir::E | Dir::W => Some(MyEdgeRef(MyEdgeId {
                         source: a.clone(),
-                        target: MyNodeId::new(e.0, e.1, 3, e.2),
-                    }))
-                }
+                        target: MyNode::new(this_x, this_y, this_dir),
+                        weight: this_weight,
+                    })),
+                    _ => None,
+                },
+                Dir::E | Dir::W => match this_dir {
+                    Dir::E | Dir::W => None,
+                    Dir::N | Dir::S => Some(MyEdgeRef(MyEdgeId {
+                        source: a.clone(),
+                        target: MyNode::new(this_x, this_y, this_dir),
+                        weight: this_weight,
+                    })),
+                },
             })
             .collect();
         MyEdgesType(v.into_iter())
     }
 }
 
-struct MyNeighbors;
+pub struct MyNeighbors;
 
 impl Iterator for MyNeighbors {
-    type Item = MyNodeId;
+    type Item = MyNode;
 
     fn next(&mut self) -> Option<Self::Item> {
         todo!()
     }
 }
 
-impl IntoNeighbors for &Grid<MyU8> {
+impl<T: Copy + PartialEq> IntoNeighbors for &Grid<T> {
     type Neighbors = MyNeighbors;
 
     #[doc = r" Return an iterator of the neighbors of node `a`."]
@@ -113,14 +172,14 @@ impl IntoNeighbors for &Grid<MyU8> {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct MyEdgeRef(MyEdgeId);
+pub struct MyEdgeRef<T>(MyEdgeId<T>);
 
-impl EdgeRef for MyEdgeRef {
-    type NodeId = MyNodeId;
+impl<T: Copy> EdgeRef for MyEdgeRef<T> {
+    type NodeId = MyNode;
 
-    type EdgeId = MyEdgeId;
+    type EdgeId = MyEdgeId<T>;
 
-    type Weight = MyEdgeWeight;
+    type Weight = T;
 
     fn source(&self) -> Self::NodeId {
         self.0.source
@@ -131,17 +190,17 @@ impl EdgeRef for MyEdgeRef {
     }
 
     fn weight(&self) -> &Self::Weight {
-        &MyEdgeWeight
+        &self.0.weight
     }
 
     fn id(&self) -> Self::EdgeId {
         self.0
     }
 }
-struct MyEdgeReferences;
+pub struct MyEdgeReferences<T>(PhantomData<T>);
 
-impl Iterator for MyEdgeReferences {
-    type Item = MyEdgeRef;
+impl<T> Iterator for MyEdgeReferences<T> {
+    type Item = MyEdgeRef<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         todo!()
@@ -149,28 +208,26 @@ impl Iterator for MyEdgeReferences {
 }
 //impl GraphRef for Grid<MyU8> {}
 
-impl IntoEdgeReferences for &Grid<MyU8> {
-    type EdgeRef = MyEdgeRef;
+impl<T: Copy + PartialEq> IntoEdgeReferences for &Grid<T> {
+    type EdgeRef = MyEdgeRef<T>;
 
-    type EdgeReferences = MyEdgeReferences;
+    type EdgeReferences = MyEdgeReferences<T>;
 
     fn edge_references(self) -> Self::EdgeReferences {
         todo!()
     }
 }
 
-struct MyNodeWeight;
+pub struct MyNodeWeight;
 
-struct MyEdgeWeight;
-
-impl Data for Grid<MyU8> {
+impl<T: Copy + PartialEq> Data for Grid<T> {
     type NodeWeight = MyNodeWeight;
 
-    type EdgeWeight = MyEdgeWeight;
+    type EdgeWeight = T;
 }
 
-struct MyVisitableMap {
-    visits: HashSet<MyNodeId>,
+pub struct MyVisitableMap {
+    visits: HashSet<MyNode>,
 }
 
 impl MyVisitableMap {
@@ -184,16 +241,16 @@ impl MyVisitableMap {
         self.visits.clear();
     }
 }
-impl VisitMap<MyNodeId> for MyVisitableMap {
-    fn visit(&mut self, a: MyNodeId) -> bool {
+impl VisitMap<MyNode> for MyVisitableMap {
+    fn visit(&mut self, a: MyNode) -> bool {
         self.visits.insert(a)
     }
 
-    fn is_visited(&self, a: &MyNodeId) -> bool {
+    fn is_visited(&self, a: &MyNode) -> bool {
         self.visits.contains(a)
     }
 }
-impl Visitable for Grid<MyU8> {
+impl<T: Copy + PartialEq> Visitable for Grid<T> {
     #[doc = r" The associated map type"]
     type Map = MyVisitableMap;
 
@@ -220,62 +277,6 @@ impl Coord {
     }
 }
 
-impl Part1 {
-    fn min_for_coord(res: &HashMap<MyNodeId, u32>, x: usize, y: usize) -> u32 {
-        res.keys()
-            .filter(|k| k.x == x && k.y == y)
-            .map(|k| res.get(k).unwrap())
-            .copied()
-            .min()
-            .unwrap()
-    }
-
-    fn best_path_from(
-        grid: &Grid<MyU8>,
-        res: &HashMap<MyNodeId, u32>,
-        node_coord: Coord,
-    ) -> Vec<(Coord, u32)> {
-        let mut completed_paths: Vec<(Vec<(Coord, u32)>)> = vec![];
-
-        let mut paths: Vec<(Coord, Vec<(Coord, u32)>)> =
-            vec![(Coord::new(node_coord.x, node_coord.y), vec![])];
-
-        while let Some((mut coord, mut path)) = paths.pop() {
-            while !(coord.x == 0 && coord.y == 0) {
-                let this_score = Part1::min_for_coord(&res, coord.x, coord.y);
-                let neighbor_min = grid
-                    .cardinal_neighbors(coord.x, coord.y)
-                    .into_iter()
-                    .map(|(x, y, _)| Part1::min_for_coord(&res, x, y))
-                    .min()
-                    .unwrap();
-                let mut min_neighbors: Vec<(usize, usize)> = grid
-                    .cardinal_neighbors(coord.x, coord.y)
-                    .into_iter()
-                    .filter(|(x, y, _)| {
-                        res.keys()
-                            .filter(|k| k.x == *x && k.y == *y)
-                            .any(|k| *res.get(&k).unwrap() == neighbor_min)
-                    })
-                    .map(|(x, y, _)| (x, y))
-                    .collect();
-                while min_neighbors.len() > 1 {
-                    let n = min_neighbors.pop().unwrap();
-                    paths.push((Coord::new(n.0, n.1), path.clone()));
-                }
-                let next = Coord::new(min_neighbors[0].0, min_neighbors[0].1);
-                path.push((next, this_score));
-                coord = next;
-            }
-            path.reverse();
-            completed_paths.push(path);
-        }
-        if completed_paths.len() > 1 {
-            panic!()
-        }
-        completed_paths.pop().unwrap()
-    }
-}
 impl PuzzleRun for Part1 {
     fn input_data(&self) -> anyhow::Result<&str> {
         Ok("2413432311323
@@ -294,52 +295,25 @@ impl PuzzleRun for Part1 {
     }
 
     fn run(&self, input: &str) -> String {
-        let grid: Grid<MyU8> = Grid::new(input);
-
-        let mut res = dijkstra(&grid, MyNodeId::new(0, 0, 3, Dir::W), None, |n| {
-            let (x, y) = (n.0.target.x, n.0.target.y);
-            grid.get(x, y).0 as u32
-        });
-
-        print!("   ");
-        for x in 0..grid.width {
-            print!("{:3}|", x);
-        }
-        println!("");
-        for y in 0..grid.height {
-            print!("{:2}:", y);
-            for x in 0..grid.width {
-                print!("{:3}|", Part1::min_for_coord(&res, x, y));
-            }
-            println!("");
-        }
+        let grid: Grid<u16> = Grid::from_str(input).unwrap();
+        let start = MyNode {
+            x: 0,
+            y: 0,
+            dir: Dir::W,
+        };
+        let mut res = dijkstra(&grid, start, None, |n| *n.weight());
 
         let candidates = res
             .keys()
-            .filter(|k| k.x == grid.width - 1 && k.y == grid.height - 1)
+            .filter(|&k| k.x == grid.width - 1 && k.y == grid.height - 1)
             .collect::<Vec<_>>();
         let min = candidates
             .iter()
-            .map(|k| res.get(k).unwrap())
+            .map(|&k| res.get(k).unwrap())
             .min()
             .unwrap();
-        let mut best = candidates
-            .iter()
-            .filter(|k| res.get(k).unwrap() == min)
-            .nth(0)
-            .unwrap();
 
-        let mut path: Vec<Coord> = vec![];
-
-        while !(best.x == 0 && best.y == 0) {
-            path.push(Coord::new(best.x, best.y));
-            best = grid.try_next(x, y, dir)
-        }
-        for c in candidates {
-            println!("{:?}:\t{}", c, res.get(c).unwrap());
-        }
-
-        format!("{:?}", 1)
+        format!("{:?}", min)
     }
 }
 
