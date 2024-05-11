@@ -1,5 +1,5 @@
 use num_traits::Zero;
-use std::{ops::AddAssign, str::FromStr};
+use std::{fmt::Display, ops::AddAssign, str::FromStr};
 
 pub(crate) struct Grid<T> {
     data: Box<[T]>,
@@ -7,6 +7,15 @@ pub(crate) struct Grid<T> {
     pub(crate) height: usize,
 }
 
+impl<T> Grid<T> {
+    pub(crate) fn new(width: usize, height: usize, data: Box<[T]>) -> Self {
+        Self {
+            data,
+            width,
+            height,
+        }
+    }
+}
 impl<T> Clone for Grid<T>
 where
     T: Clone,
@@ -22,7 +31,7 @@ where
 
 impl<T> Grid<T>
 where
-    T: Clone,
+    T: Clone + Default,
 {
     pub(crate) fn new_with(width: usize, height: usize, el: T) -> Self {
         let mut v = vec![];
@@ -33,29 +42,20 @@ where
             data: v.into_boxed_slice(),
         }
     }
-}
-impl<T> FromStr for Grid<T>
-where
-    T: From<u8>,
-{
-    type Err = &'static str;
 
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let mut v: Vec<T> = Default::default();
-        let mut width = 0;
-        for line in input.lines().map(str::trim) {
-            let mut w = 0;
-            for c in line.bytes() {
-                v.push(c.into());
-                w += 1;
+    pub(crate) fn new_from<F: Fn(usize, usize) -> T>(width: usize, height: usize, f: F) -> Self {
+        let mut v = Vec::with_capacity(width * height);
+        v.resize_with(width * height, Default::default);
+        for y in 0..height {
+            for x in 0..width {
+                v[y * width + x] = f(x, y);
             }
-            width = w;
         }
-        Ok(Grid {
-            height: v.len() / width,
-            data: v.into_boxed_slice(),
+        Self {
             width,
-        })
+            height,
+            data: v.into_boxed_slice(),
+        }
     }
 }
 
@@ -77,15 +77,14 @@ impl<T> Grid<T> {
     }
 }
 
-impl<T> Grid<T> {
-    pub(crate) fn fmt<F>(&self, f: &mut std::fmt::Formatter<'_>, conv: F) -> std::fmt::Result
-    where
-        F: Fn(&T) -> &str,
-    {
+impl<T: Display> Display for Grid<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = format!("Grid ({} by {}):\n", self.width, self.height);
         for row in 0..self.height {
             for col in 0..self.width {
-                s.push_str(conv(self.get(col, row)));
+                s.push('|');
+                s.push_str(&self.get(col, row).to_string());
+                s.push('|');
             }
             s.push('\n');
         }
@@ -93,16 +92,7 @@ impl<T> Grid<T> {
         write!(f, "{}", s)
     }
 }
-/*
-impl<T> Display for Grid<T>
-where
-    char: for<'a> From<&'a T>,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.fmt(f, |i| i.into())
-    }
-}
-*/
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Dir {
     N,
@@ -111,7 +101,7 @@ pub(crate) enum Dir {
     W,
 }
 
-impl<T: Copy + PartialEq> Grid<T> {
+impl<T> Grid<T> {
     pub(crate) fn count_cells<F>(&self, f: F) -> usize
     where
         F: Fn(&T) -> bool,
@@ -119,32 +109,32 @@ impl<T: Copy + PartialEq> Grid<T> {
         self.data.iter().filter(|&i| f(i)).count()
     }
 
-    pub(crate) fn try_next_coord(&self, x: usize, y: usize, dir: Dir) -> Option<(usize, usize, T)> {
+    pub(crate) fn try_next_coord(&self, x: usize, y: usize, dir: Dir) -> Option<(usize, usize)> {
         match dir {
             Dir::E => {
                 if x + 1 < self.width {
-                    Some((x + 1, y, *self.get(x + 1, y)))
+                    Some((x + 1, y))
                 } else {
                     None
                 }
             }
             Dir::W => {
                 if x > 0 {
-                    Some((x - 1, y, *self.get(x - 1, y)))
+                    Some((x - 1, y))
                 } else {
                     None
                 }
             }
             Dir::N => {
                 if y > 0 {
-                    Some((x, y - 1, *self.get(x, y - 1)))
+                    Some((x, y - 1))
                 } else {
                     None
                 }
             }
             Dir::S => {
                 if y + 1 < self.height {
-                    Some((x, y + 1, *self.get(x, y + 1)))
+                    Some((x, y + 1))
                 } else {
                     None
                 }
@@ -154,19 +144,51 @@ impl<T: Copy + PartialEq> Grid<T> {
 
     fn try_next(&self, x: usize, y: usize, dir: Dir) -> Option<&T> {
         self.try_next_coord(x, y, dir)
-            .and_then(|(x, y, w)| Some(w).as_ref())
+            .and_then(|(x, y)| Some(self.get(x, y)))
     }
 
     fn try_next_mut(&mut self, x: usize, y: usize, dir: Dir) -> Option<&mut T> {
         self.try_next_coord(x, y, dir)
-            .and_then(|(x, y, w)| Some(w).as_mut())
+            .and_then(|(x, y)| Some(self.get_mut(x, y)))
     }
 }
 
 impl<T> Grid<T>
 where
-    T: AddAssign<T> + Zero,
+    T: AddAssign<T> + Zero + Copy,
 {
+    pub(crate) fn weight_between(&self, x1: usize, y1: usize, x2: usize, y2: usize) -> T {
+        let mut weight = T::zero();
+        if x1 == x2 && y1 == y2 {
+            panic!();
+        }
+        if x1 == x2 {
+            if y2 > y1 {
+                for i in 0..(y2 - y1) {
+                    weight += *self.get(x1, y1 + 1 + i);
+                }
+            } else {
+                for i in 0..(y1 - y2) {
+                    weight += *self.get(x1, y1 - 1 - i);
+                }
+            }
+        } else if y1 == y2 {
+            if x2 > x1 {
+                for i in 0..(x2 - x1) {
+                    weight += *self.get(x1 + 1 + i, y1);
+                }
+            } else {
+                for i in 0..(x1 - x2) {
+                    weight += *self.get(x1 - 1 - i, y1);
+                }
+            }
+        } else {
+            panic!()
+        }
+        weight
+    }
+}
+impl<T> Grid<T> {
     /**
      * Dir in the return tuple is the direction from which we'll move
      */
@@ -175,43 +197,27 @@ where
         x: usize,
         y: usize,
         cnt: usize,
-    ) -> Vec<(usize, usize, Dir, T)> {
+    ) -> Vec<(usize, usize, Dir)> {
         let mut v = vec![];
 
-        let mut weight = T::zero();
         for c in 0..cnt {
             if y >= c {
-                if let Some((next_x, next_y, next_weight)) = self.try_next_coord(x, y - c, Dir::N) {
-                    weight += next_weight;
-                    v.push((next_x, next_y, Dir::S, weight));
+                if let Some((next_x, next_y)) = self.try_next_coord(x, y - c, Dir::N) {
+                    v.push((next_x, next_y, Dir::S));
                 }
             }
-        }
-
-        weight = T::zero();
-        for c in 0..cnt {
-            if let Some((next_x, next_y, next_weight)) = self.try_next_coord(x, y + c, Dir::S) {
-                weight += next_weight;
-                v.push((next_x, next_y, Dir::N, weight));
+            if let Some((next_x, next_y)) = self.try_next_coord(x, y + c, Dir::S) {
+                v.push((next_x, next_y, Dir::N));
             }
-        }
-        weight = T::zero();
-        for c in 0..cnt {
-            if let Some((next_x, next_y, next_weight)) = self.try_next_coord(x + c, y, Dir::E) {
-                weight += next_weight;
-                v.push((next_x, next_y, Dir::W, weight));
+            if let Some((next_x, next_y)) = self.try_next_coord(x + c, y, Dir::E) {
+                v.push((next_x, next_y, Dir::W));
             }
-        }
-        weight = T::zero();
-        for c in 0..cnt {
             if x >= c {
-                if let Some((next_x, next_y, next_weight)) = self.try_next_coord(x - c, y, Dir::W) {
-                    weight += next_weight;
-                    v.push((next_x, next_y, Dir::E, weight));
+                if let Some((next_x, next_y)) = self.try_next_coord(x - c, y, Dir::W) {
+                    v.push((next_x, next_y, Dir::E));
                 }
             }
         }
-
         v
     }
 }
@@ -221,6 +227,43 @@ mod test {
 
     use super::*;
 
+    #[derive(Clone, Default, Debug, Copy, PartialEq, PartialOrd)]
+    struct Test(u8);
+
+    impl From<&Test> for char {
+        fn from(value: &Test) -> Self {
+            char::from_digit(value.0 as u32, 10).unwrap()
+        }
+    }
+
+    impl Display for Test {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:2}", self.0)
+        }
+    }
+    impl Zero for Test {
+        fn zero() -> Self {
+            Self(0)
+        }
+
+        fn is_zero(&self) -> bool {
+            self.0 == 0
+        }
+    }
+
+    impl std::ops::Add for Test {
+        type Output = Test;
+
+        fn add(self, rhs: Self) -> Self::Output {
+            Test(self.0 + rhs.0)
+        }
+    }
+
+    impl std::ops::AddAssign for Test {
+        fn add_assign(&mut self, rhs: Self) {
+            self.0 += rhs.0;
+        }
+    }
     #[test]
     fn test_neighbors() {
         let g = Grid::new_with(10, 10, 13u32);
@@ -232,9 +275,19 @@ mod test {
         assert_eq!(
             g.cardinal_neighbors(5, 0, 2)
                 .iter()
-                .filter(|n| false)
+                .filter(|(x, y, d)| g.weight_between(5, 0, *x, *y) == 26)
                 .count(),
-            2
+            3
         );
+    }
+
+    #[test]
+    fn test_weights() {
+        let g: Grid<Test> = Grid::new_from(10, 10, |x, y| Test(2 * (x as u8) + 2 * (y as u8)));
+        println!("{}", g);
+        assert_eq!(g.weight_between(0, 0, 3, 0), Test(12));
+        assert_eq!(g.weight_between(3, 0, 0, 0), Test(6));
+        assert_eq!(g.weight_between(0, 0, 0, 3), Test(12));
+        assert_eq!(g.weight_between(0, 3, 0, 0), Test(6));
     }
 }

@@ -6,6 +6,7 @@ use std::{
     str::FromStr,
 };
 
+use num::Bounded;
 use num_traits::Zero;
 
 use petgraph::{
@@ -25,6 +26,24 @@ pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
 }
 
 struct Part1;
+
+impl FromStr for Grid<u16> {
+    type Err = &'static str;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let mut v: Vec<u16> = Default::default();
+        let mut width = 0;
+        for line in input.lines().map(str::trim) {
+            let mut w = 0;
+            for c in line.chars() {
+                v.push(c.to_digit(10).unwrap().try_into().unwrap());
+                w += 1;
+            }
+            width = w;
+        }
+        Ok(Grid::new(width, v.len() / width, v.into_boxed_slice()))
+    }
+}
 
 /*
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -83,6 +102,31 @@ impl MyGraph {
 }
 
 */
+
+impl<T> Grid<T>
+where
+    T: Bounded + AddAssign<T> + Zero + Copy + PartialOrd,
+{
+    fn select_best<'a>(
+        &self,
+        target: (usize, usize),
+        neighbors: Vec<(usize, usize, Dir)>,
+        res_map: &'a HashMap<(usize, usize), Vec<(&MyNode, T)>>,
+    ) -> &'a MyNode {
+        let mut best = T::max_value();
+        let mut best_n: Option<&MyNode> = None;
+        for i in 0..neighbors.len() {
+            for n in res_map.get(&(neighbors[i].0, neighbors[i].1)).unwrap() {
+                let this_weight = n.1 + self.weight_between(n.0.x, n.0.y, target.0, target.1);
+                if this_weight < best {
+                    best_n = Some(n.0);
+                    best = this_weight;
+                }
+            }
+        }
+        best_n.unwrap()
+    }
+}
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct MyEdgeId<T> {
     source: MyNode,
@@ -127,14 +171,14 @@ where
 
     fn edges(self, a: Self::NodeId) -> Self::Edges {
         let mut v: Vec<MyEdgeRef<T>> = self
-            .cardinal_neighbors(a.x, a.y, 2)
+            .cardinal_neighbors(a.x, a.y, 3)
             .into_iter()
-            .filter_map(|(this_x, this_y, this_dir, this_weight)| match a.dir {
+            .filter_map(|(this_x, this_y, this_dir)| match a.dir {
                 Dir::N | Dir::S => match this_dir {
                     Dir::E | Dir::W => Some(MyEdgeRef(MyEdgeId {
                         source: a.clone(),
                         target: MyNode::new(this_x, this_y, this_dir),
-                        weight: this_weight,
+                        weight: self.weight_between(a.x, a.y, this_x, this_y),
                     })),
                     _ => None,
                 },
@@ -143,7 +187,7 @@ where
                     Dir::N | Dir::S => Some(MyEdgeRef(MyEdgeId {
                         source: a.clone(),
                         target: MyNode::new(this_x, this_y, this_dir),
-                        weight: this_weight,
+                        weight: self.weight_between(a.x, a.y, this_x, this_y),
                     })),
                 },
             })
@@ -277,7 +321,77 @@ impl Coord {
     }
 }
 
+impl Part1 {}
 impl PuzzleRun for Part1 {
+    fn input_data(&self) -> anyhow::Result<&str> {
+        read_file("input/day17.txt")
+        /*
+        Ok("2413432311323
+        3215453535623
+        3255245654254
+        3446585845452
+        4546657867536
+        1438598798454
+        4457876987766
+        3637877979653
+        4654967986887
+        4564679986453
+        1224686865563
+        2546548887735
+        4322674655533")
+        */
+    }
+
+    fn run(&self, input: &str) -> String {
+        let grid: Grid<u16> = Grid::from_str(input).unwrap();
+        let start = MyNode {
+            x: 0,
+            y: 0,
+            dir: Dir::W,
+        };
+        let res = dijkstra(&grid, start, None, |n| *n.weight());
+        let mut res_map: HashMap<(usize, usize), Vec<(&MyNode, u16)>> = Default::default();
+        for node in res.keys() {
+            res_map
+                .entry((node.x, node.y))
+                .and_modify(|v| v.push((node, *res.get(node).unwrap())))
+                .or_insert(vec![(node, *res.get(node).unwrap())]);
+        }
+
+        let candidates = res
+            .keys()
+            .filter(|&k| k.x == grid.width - 1 && k.y == grid.height - 1)
+            .collect::<Vec<_>>();
+        let min = *candidates
+            .iter()
+            .map(|&k| res.get(k).unwrap())
+            .min()
+            .unwrap();
+        let min_candidates: Vec<&MyNode> = candidates
+            .into_iter()
+            .filter(|&k| *res.get(k).unwrap() == min)
+            .collect();
+
+        println!("{} possible paths", min_candidates.len());
+        if min_candidates.len() != 1 {
+            panic!();
+        }
+        let mut n = min_candidates[0];
+        while !(n.x == 0 && n.y == 0) {
+            let neighbors = grid.cardinal_neighbors(n.x, n.y, 2);
+            if neighbors.is_empty() {
+                panic!();
+            }
+            n = grid.select_best((n.x, n.y), neighbors, &res_map);
+            println!("from {:?}", n);
+        }
+        format!("{:?}", min)
+    }
+}
+
+struct Part2;
+
+impl PuzzleRun for Part2 {
     fn input_data(&self) -> anyhow::Result<&str> {
         Ok("2413432311323
         3215453535623
@@ -301,22 +415,19 @@ impl PuzzleRun for Part1 {
             y: 0,
             dir: Dir::W,
         };
-        let mut res = dijkstra(&grid, start, None, |n| *n.weight());
-
+        let res = dijkstra(&grid, start, None, |n| *n.weight());
         let candidates = res
             .keys()
             .filter(|&k| k.x == grid.width - 1 && k.y == grid.height - 1)
             .collect::<Vec<_>>();
-        let min = candidates
+        let min = *candidates
             .iter()
             .map(|&k| res.get(k).unwrap())
             .min()
             .unwrap();
-
         format!("{:?}", min)
     }
 }
-
 #[cfg(test)]
 mod test {
 

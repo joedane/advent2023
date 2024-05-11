@@ -127,7 +127,7 @@ struct Node {
 }
 
 impl Node {
-    fn new(coord: Coord, symbol: Symbol) -> Self {
+    fn new(_coord: Coord, symbol: Symbol) -> Self {
         Self {
             symbol,
             onpath: false,
@@ -198,7 +198,7 @@ fn parse(input: &str) -> (Grid, Coord) {
     let mut num_cols: u16 = 0;
     let mut start: Option<Coord> = None;
 
-    for (line_no, line) in input.lines().map(|s| s.trim()).enumerate() {
+    for (_line_no, line) in input.lines().map(|s| s.trim()).enumerate() {
         num_rows += 1;
         num_cols = 0;
         for (col_no, c) in line.bytes().enumerate() {

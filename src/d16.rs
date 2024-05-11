@@ -22,6 +22,12 @@ enum Symbol {
     Backslash,
 }
 
+impl Default for Symbol {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 impl From<Symbol> for char {
     fn from(value: Symbol) -> Self {
         match value {
@@ -74,7 +80,7 @@ impl From<u8> for Symbol {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct Cell {
     symbol: Symbol,
     visited: Vec<Dir>,
@@ -187,7 +193,7 @@ fn score(grid: &Grid<Cell>, start: RayState) -> usize {
                 }
             };
             let next = grid.try_next_coord(current.x, current.y, next_dir);
-            if let Some((next_x, next_y, _)) = next {
+            if let Some((next_x, next_y)) = next {
                 if grid.get(next_x, next_y).was_visited_from(next_dir) {
                     continue 'stack;
                 } else {
@@ -200,6 +206,25 @@ fn score(grid: &Grid<Cell>, start: RayState) -> usize {
     }
     grid.count_cells(|c| !c.visited.is_empty())
 }
+
+impl FromStr for Grid<Cell> {
+    type Err = &'static str;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let mut v: Vec<Cell> = Default::default();
+        let mut width = 0;
+        for line in input.lines().map(str::trim) {
+            let mut w = 0;
+            for c in line.chars() {
+                v.push(c.into());
+                w += 1;
+            }
+            width = w;
+        }
+        Ok(Grid::new(width, v.len() / width, v.into_boxed_slice()))
+    }
+}
+
 impl PuzzleRun for Part1 {
     fn input_data(&self) -> anyhow::Result<&str> {
         read_file("input/day16.txt")
