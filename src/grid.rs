@@ -1,6 +1,7 @@
 use num_traits::Zero;
 use std::{fmt::Display, ops::AddAssign, str::FromStr};
 
+#[derive(Clone)]
 pub(crate) struct Grid<T> {
     data: Box<[T]>,
     pub(crate) width: usize,
@@ -13,18 +14,6 @@ impl<T> Grid<T> {
             data,
             width,
             height,
-        }
-    }
-}
-impl<T> Clone for Grid<T>
-where
-    T: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            data: self.data.clone(),
-            width: self.width.clone(),
-            height: self.height.clone(),
         }
     }
 }
@@ -51,11 +40,7 @@ where
                 v[y * width + x] = f(x, y);
             }
         }
-        Self {
-            width,
-            height,
-            data: v.into_boxed_slice(),
-        }
+        Self::new(width, height, v.into_boxed_slice())
     }
 }
 
@@ -196,11 +181,11 @@ impl<T> Grid<T> {
         &self,
         x: usize,
         y: usize,
-        cnt: usize,
+        distance: std::ops::Range<usize>,
     ) -> Vec<(usize, usize, Dir)> {
         let mut v = vec![];
 
-        for c in 0..cnt {
+        for c in distance {
             if y >= c {
                 if let Some((next_x, next_y)) = self.try_next_coord(x, y - c, Dir::N) {
                     v.push((next_x, next_y, Dir::S));
@@ -219,6 +204,26 @@ impl<T> Grid<T> {
             }
         }
         v
+    }
+
+    pub(crate) fn direction_range(
+        &self,
+        x: usize,
+        y: usize,
+        min: usize,
+        max: usize,
+        dir: Dir,
+    ) -> Vec<(usize, usize)> {
+        match dir {
+            Dir::W => (x.saturating_sub(max)..=(x.saturating_sub(min)))
+                .map(|c| (c, y))
+                .collect(),
+            Dir::E => ((x + min)..(x + max)).map(|c| (c, y)).collect(),
+            Dir::N => (y.saturating_sub(max)..=(y.saturating_sub(min)))
+                .map(|c| (x, c))
+                .collect(),
+            Dir::S => ((y + min)..(y + max)).map(|c| (x, c)).collect(),
+        }
     }
 }
 
@@ -268,17 +273,20 @@ mod test {
     fn test_neighbors() {
         let g = Grid::new_with(10, 10, 13u32);
 
-        assert_eq!(g.cardinal_neighbors(5, 5, 1).len(), 4);
-        assert_eq!(g.cardinal_neighbors(0, 0, 1).len(), 2);
-        assert_eq!(g.cardinal_neighbors(5, 0, 2).len(), 6);
+        assert_eq!(g.cardinal_neighbors(5, 5, 0..1).len(), 4);
+        assert_eq!(g.cardinal_neighbors(0, 0, 0..1).len(), 2);
+        assert_eq!(g.cardinal_neighbors(5, 0, 0..2).len(), 6);
 
         assert_eq!(
-            g.cardinal_neighbors(5, 0, 2)
+            g.cardinal_neighbors(5, 0, 0..2)
                 .iter()
                 .filter(|(x, y, d)| g.weight_between(5, 0, *x, *y) == 26)
                 .count(),
             3
         );
+
+        let g = Grid::new_with(50, 50, 2u32);
+        assert_eq!(g.cardinal_neighbors(0, 0, 4..11).len(), 14);
     }
 
     #[test]
@@ -289,5 +297,36 @@ mod test {
         assert_eq!(g.weight_between(3, 0, 0, 0), Test(6));
         assert_eq!(g.weight_between(0, 0, 0, 3), Test(12));
         assert_eq!(g.weight_between(0, 3, 0, 0), Test(6));
+    }
+
+    #[test]
+    fn test_part2() {
+        let g: Grid<u16> = Grid::from_str(
+            "111111111111
+         999999999991
+         999999999991
+         999999999991
+         999999999991",
+        )
+        .unwrap();
+
+        assert_eq!(g.cardinal_neighbors(0, 0, 3..10).len(), 8);
+        assert_eq!(g.weight_between(0, 0, 0, 4), 36);
+    }
+
+    #[test]
+    fn test_range() {
+        let g: Grid<u16> = Grid::from_str(
+            "111111111111
+         999999999991
+         999999999991
+         999999999991
+         999999999991",
+        )
+        .unwrap();
+        assert_eq!(g.direction_range(0, 0, 4, 11, Dir::E).len(), 7);
+        assert_eq!(g.direction_range(11, 4, 4, 11, Dir::N).len(), 1);
+        assert_eq!(g.direction_range(4, 0, 4, 11, Dir::W).len(), 1);
+        assert_eq!(g.direction_range(7, 0, 4, 11, Dir::E).len(), 1);
     }
 }
