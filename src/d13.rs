@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use super::PuzzleRun;
 
 pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
@@ -160,22 +161,23 @@ impl std::ops::Index<(usize, usize)> for Data {
 }
 impl PuzzleRun for Part1 {
     fn input_data(&self) -> anyhow::Result<&str> {
-        #[rustfmt::skip]
-        let s = "#.##..##.
-..#.##.#.
-##......#
-##......#
-..#.##.#.
-..##..##.
-#.#.##.#.
+        /*
+                let s = "#.##..##.
+        ..#.##.#.
+        ##......#
+        ##......#
+        ..#.##.#.
+        ..##..##.
+        #.#.##.#.
 
-#...##..#
-#....#..#
-..##..###
-#####.##.
-#####.##.
-..##..###
-#....#..#";
+        #...##..#
+        #....#..#
+        ..##..###
+        #####.##.
+        #####.##.
+        ..##..###
+        #....#..#";
+                */
         crate::read_file("input/day13.txt")
         //Ok(s)
     }

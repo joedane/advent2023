@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::{read_file, PuzzleRun};
 use itertools::Itertools;
 use rayon::prelude::*;
@@ -12,8 +13,8 @@ pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
 struct Record {
     line: String,
     counts: Vec<u8>,
-    total_broken: u32,
-    known_broken: u32,
+    _total_broken: u32,
+    _known_broken: u32,
 }
 
 impl Record {
@@ -57,7 +58,7 @@ impl Part1 {
             .enumerate()
             .filter_map(|(i, b)| if b == '?' { Some(i) } else { None })
             .collect();
-        let need_to_place: u32 = r.total_broken - r.known_broken;
+        let need_to_place: u32 = r._total_broken - r._known_broken;
 
         Ok(indicies
             .iter()
@@ -69,12 +70,12 @@ impl Part1 {
     }
 }
 impl Record {
-    fn new(line: String, counts: Vec<u8>, total_broken: u32, known_broken: u32) -> Self {
+    fn new(line: String, counts: Vec<u8>, _total_broken: u32, _known_broken: u32) -> Self {
         Self {
             line,
             counts,
-            total_broken,
-            known_broken,
+            _total_broken,
+            _known_broken,
         }
     }
 
@@ -88,7 +89,6 @@ impl Record {
 
         let counts: Vec<u8> = counts
             .split(',')
-            .into_iter()
             .map(|s| s.parse::<u8>().or(Err("parse failure")))
             .collect::<Result<Vec<u8>, _>>()?;
 
@@ -113,7 +113,7 @@ impl Record {
 
         let mut next_i: usize = 0;
 
-        for mut required_len in &self.counts {
+        for required_len in &self.counts {
             while next_i < this_choice.len() && this_choice.as_bytes()[next_i] != b'#' {
                 next_i += 1;
             }
@@ -147,7 +147,7 @@ impl PuzzleRun for Part1 {
         let counts: Result<usize, &str> = input
             .lines()
             .map(str::trim)
-            .map(|s| Record::parse(s))
+            .map(Record::parse)
             .map(|r| r.and_then(|r| Part1::count_choices(&r)))
             .sum();
 
@@ -158,7 +158,7 @@ impl PuzzleRun for Part1 {
 struct Part2;
 
 fn print_seen(seen: &str, mark: &str) {
-    // println!("{seen} ({mark})");
+    println!("{seen} ({mark})");
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -188,7 +188,6 @@ fn count_matches(
     match cache.get(&k) {
         Some(n) => *n,
         None => {
-            let s = seen.as_bytes().clone();
             let n = _count_matches(original, remaining, groups, in_run, seen.clone(), cache);
             cache.insert(k, n);
             n
@@ -204,7 +203,6 @@ fn _count_matches(
     seen: String,
     cache: &mut HashMap<CacheKey, u32>,
 ) -> u32 {
-    let this_str: &str = std::str::from_utf8(&remaining).unwrap();
     let _original_len = original.len();
     let _seen_len = seen.len();
 
@@ -248,30 +246,26 @@ fn _count_matches(
                     if rest[0] == b'#' {
                         // run too long
                         0
+                    } else if groups.len() == 1 {
+                        seen.push_str(std::str::from_utf8(rest).unwrap());
+                        print_seen(&seen, "C");
+                        1
                     } else {
-                        if groups.len() == 1 {
-                            seen.push_str(std::str::from_utf8(rest).unwrap());
-                            print_seen(&seen, "C");
-                            1
-                        } else {
-                            0
-                        }
-                    }
-                } else {
-                    if rest[0] == b'#' {
-                        // run too long
                         0
-                    } else {
-                        seen.push(rest[0].into());
-                        count_matches(
-                            original,
-                            rest[1..].to_vec(),
-                            groups[1..].to_vec(),
-                            false,
-                            seen,
-                            cache,
-                        )
                     }
+                } else if rest[0] == b'#' {
+                    // run too long
+                    0
+                } else {
+                    seen.push(rest[0].into());
+                    count_matches(
+                        original,
+                        rest[1..].to_vec(),
+                        groups[1..].to_vec(),
+                        false,
+                        seen,
+                        cache,
+                    )
                 }
             } else {
                 let mut new_groups = groups.clone();
@@ -303,13 +297,13 @@ fn check(pat: &str, groups: Vec<u8>) -> bool {
 }
 
 fn _check(pat: &str, groups: Vec<u8>, in_run: bool) -> bool {
-    if pat.len() == 0 {
-        return groups.len() == 0;
+    if pat.is_empty() {
+        return groups.is_empty();
     }
-    match (pat.chars().nth(0).unwrap(), in_run) {
+    match (pat.chars().next().unwrap(), in_run) {
         ('.', true) => false,
         ('.', false) => _check(&pat[1..], groups, false),
-        ('#', _) if groups.len() == 0 => false,
+        ('#', _) if groups.is_empty() => false,
         ('#', _) if groups[0] == 1 => {
             if pat.len() == 1 {
                 true
@@ -335,7 +329,7 @@ impl Part2 {
         let (line, counts) = s.split_ascii_whitespace().next_tuple().unwrap();
         new_s.push_str(line);
         new_c.push_str(counts);
-        for i in 0..4 {
+        for _ in 0..4 {
             new_s.push('?');
             new_s.push_str(line);
             new_c.push(',');
@@ -372,9 +366,9 @@ impl PuzzleRun for Part2 {
             })
             .par_bridge()
             .map(str::trim)
-            .map(|s| Part2::expand(s))
+            .map(Part2::expand)
             .map(|s| Record::parse(&s))
-            .map(|r| r.and_then(|r| Ok(r.count_choices())))
+            .map(|r| r.map(|r| r.count_choices()))
             .sum();
 
         format!("{}", counts.unwrap())
@@ -473,7 +467,7 @@ mod test {
         let file = std::fs::File::open("test.out").unwrap();
         for line in std::io::BufReader::new(file).lines() {
             let line = line.unwrap();
-            let (pat, code) = line.split_at(line.find(' ').unwrap());
+            let (pat, _code) = line.split_at(line.find(' ').unwrap());
             println!("{pat}");
             let mut pat = pat.replace('?', ".");
             pat.push(' ');

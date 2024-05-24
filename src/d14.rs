@@ -1,7 +1,6 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::Display,
-    ops::{Index, IndexMut},
 };
 
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};

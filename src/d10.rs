@@ -2,7 +2,7 @@ use crate::{read_file, PuzzleRun};
 use std::ops::{Index, IndexMut};
 
 pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
-    vec![Box::new(Part1)]
+    vec![Box::new(Part1), Box::new(Part2)]
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -198,10 +198,10 @@ fn parse(input: &str) -> (Grid, Coord) {
     let mut num_cols: u16 = 0;
     let mut start: Option<Coord> = None;
 
-    for (_line_no, line) in input.lines().map(|s| s.trim()).enumerate() {
+    for line in input.lines().map(|s| s.trim()) {
         num_rows += 1;
         num_cols = 0;
-        for (col_no, c) in line.bytes().enumerate() {
+        for _c in line.bytes().enumerate() {
             num_cols += 1;
         }
     }
@@ -387,13 +387,11 @@ impl PuzzleRun for Part2 {
 
         let (mut grid, start) = parse(input);
         let mut inside_count = 0_u32;
-        let mut current_state = InOut::Outside;
 
         let (_, _, start_symbol) = walk_path(&mut grid, start);
         grid[start].symbol = start_symbol;
 
         for row in 0..grid.rows {
-            let mut crosses = 0_u32;
             let row_start = Coord::new(row, 0);
             let mut current_state = if grid[row_start].onpath {
                 match grid[row_start].symbol {

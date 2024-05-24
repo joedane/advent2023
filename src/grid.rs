@@ -60,6 +60,35 @@ impl<T> Grid<T> {
     pub(crate) fn coord(&self, x: usize, y: usize) -> usize {
         y * self.width + x
     }
+
+    pub(crate) fn distance_between(
+        &self,
+        source_x: usize,
+        source_y: usize,
+        target_x: usize,
+        target_y: usize,
+        this_dir: Dir,
+    ) -> usize {
+        match this_dir {
+            Dir::E => {
+                assert!(source_y == target_y && source_x > target_x);
+                source_x - target_x
+            }
+
+            Dir::W => {
+                assert!(source_y == target_y && source_x < target_x);
+                target_x - source_x
+            }
+            Dir::N => {
+                assert!(source_x == target_x && source_y < target_y);
+                target_y - source_y
+            }
+            Dir::S => {
+                assert!(source_x == target_x && source_y > target_y);
+                source_y - target_y
+            }
+        }
+    }
 }
 
 impl<T: Display> Display for Grid<T> {

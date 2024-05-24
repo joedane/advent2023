@@ -2,7 +2,7 @@ use crate::{read_file, PuzzleRun};
 use std::collections::{BTreeSet, HashSet};
 
 pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
-    vec![Box::new(Part1)]
+    vec![Box::new(Part1), Box::new(Part2)]
 }
 
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
@@ -24,6 +24,7 @@ impl Coord {
 }
 
 fn dump(rows: u32, cols: u32, map: &BTreeSet<Coord>) {
+    #![allow(clippy::println_empty_string)]
     let mut id = 0_u32;
     for r in 0..rows {
         for c in 0..cols {
@@ -57,6 +58,7 @@ impl PuzzleRun for Part1 {
     }
 
     fn run(&self, input: &str) -> String {
+        #![allow(unused_assignments)]
         let mut galaxies: Vec<Coord> = Default::default();
         let mut row: u32 = 0;
         let mut col: u32 = 0;
@@ -70,7 +72,7 @@ impl PuzzleRun for Part1 {
                 if c == b'#' {
                     rows_occupied.insert(row);
                     cols_occupied.insert(col);
-                    galaxies.push(Coord::new(row, col.try_into().unwrap()));
+                    galaxies.push(Coord::new(row, col));
                 }
                 col += 1;
             }
@@ -118,7 +120,7 @@ impl PuzzleRun for Part1 {
         dump(row, num_cols, &galaxy_map);
         for galaxy_i in galaxy_map.iter() {
             for galaxy_j in galaxy_map.range(galaxy_i..) {
-                let dist = galaxy_i.dist(&galaxy_j);
+                let dist = galaxy_i.dist(galaxy_j);
                 total_dist += dist;
                 println!("dist from {:?} to {:?}: {}", galaxy_i, galaxy_j, dist)
             }
@@ -146,6 +148,7 @@ impl PuzzleRun for Part2 {
     }
 
     fn run(&self, input: &str) -> String {
+        #![allow(unused_assignments)]
         let mut galaxies: Vec<Coord> = Default::default();
         let mut row: u32 = 0;
         let mut col: u32 = 0;
@@ -159,7 +162,7 @@ impl PuzzleRun for Part2 {
                 if c == b'#' {
                     rows_occupied.insert(row);
                     cols_occupied.insert(col);
-                    galaxies.push(Coord::new(row, col.try_into().unwrap()));
+                    galaxies.push(Coord::new(row, col));
                 }
                 col += 1;
             }
@@ -209,7 +212,7 @@ impl PuzzleRun for Part2 {
                 std::ops::Bound::Excluded(galaxy_i),
                 std::ops::Bound::Unbounded,
             )) {
-                let dist = galaxy_i.dist(&galaxy_j);
+                let dist = galaxy_i.dist(galaxy_j);
                 total_dist += dist as u64;
                 println!("dist from {:?} to {:?}: {}", galaxy_i, galaxy_j, dist)
             }

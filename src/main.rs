@@ -12,6 +12,8 @@ mod d14;
 mod d15;
 mod d16;
 mod d17;
+mod d18;
+mod d19;
 mod d2;
 mod d3;
 mod d4;
@@ -63,6 +65,9 @@ enum PuzzleDay {
     Day14,
     Day15,
     Day16,
+    Day17,
+    Day18,
+    Day19,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -87,6 +92,9 @@ fn main() -> anyhow::Result<()> {
         Some(PuzzleDay::Day14) => d14::get_runs(),
         Some(PuzzleDay::Day15) => d15::get_runs(),
         Some(PuzzleDay::Day16) => d16::get_runs(),
+        Some(PuzzleDay::Day17) => d17::get_runs(),
+        Some(PuzzleDay::Day18) => d18::get_runs(),
+        Some(PuzzleDay::Day19) => d19::get_runs(),
         _ => {
             println!("not found: {:?}", args.day);
             panic!()

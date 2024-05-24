@@ -19,7 +19,7 @@ use super::{read_file, PuzzleRun};
 use crate::grid::{Dir, Grid};
 
 pub(crate) fn get_runs() -> std::vec::Vec<Box<dyn PuzzleRun>> {
-    vec![Box::new(Part1)]
+    vec![Box::new(Part2)]
 }
 
 struct Part1;
@@ -53,12 +53,18 @@ pub struct MyEdgeId<T> {
 pub struct MyNode {
     x: usize,
     y: usize,
-    dir: Dir,
+    dir_from: Dir,
+    dist_from: usize,
 }
 
 impl MyNode {
-    fn new(x: usize, y: usize, dir: Dir) -> Self {
-        Self { x, y, dir }
+    fn new(x: usize, y: usize, dir_from: Dir, dist_from: usize) -> Self {
+        Self {
+            x,
+            y,
+            dir_from,
+            dist_from,
+        }
     }
 }
 impl<T: Copy + PartialEq> GraphBase for Grid<T> {
@@ -80,24 +86,51 @@ impl<T> Iterator for MyEdgesType<T> {
 }
 impl<T> IntoEdges for &Grid<T>
 where
-    T: Copy + PartialEq + AddAssign<T> + Add<Output = T> + Zero,
+    T: Copy + PartialEq + AddAssign<T> + Add<Output = T> + Zero + std::fmt::Debug,
 {
     type Edges = MyEdgesType<T>;
 
     fn edges(self, a: Self::NodeId) -> Self::Edges {
+        if a.x == 0 && a.y == 0 {
+            let edges: Vec<MyEdgeRef<T>> = self
+                .cardinal_neighbors(0, 0, 3..10)
+                .into_iter()
+                .map(|(this_x, this_y, this_dir)| {
+                    MyEdgeRef(MyEdgeId {
+                        source: a.clone(),
+                        target: MyNode::new(
+                            this_x,
+                            this_y,
+                            this_dir,
+                            self.distance_between(0, 0, this_x, this_y, this_dir),
+                        ),
+                        weight: self.weight_between(0, 0, this_x, this_y),
+                    })
+                })
+                .collect();
+            return MyEdgesType(edges.into_iter());
+        }
         let mut v: Vec<MyEdgeRef<T>> = self
             .cardinal_neighbors(a.x, a.y, 3..10)
             .into_iter()
-            .filter_map(|(this_x, this_y, this_dir)| match (a.dir, this_dir) {
+            .filter_map(|(this_x, this_y, this_dir)| match (a.dir_from, this_dir) {
                 (Dir::N | Dir::S, Dir::N | Dir::S) => None,
                 (Dir::E | Dir::W, Dir::E | Dir::W) => None,
                 _ => Some(MyEdgeRef(MyEdgeId {
                     source: a.clone(),
-                    target: MyNode::new(this_x, this_y, this_dir),
+                    target: MyNode::new(
+                        this_x,
+                        this_y,
+                        this_dir,
+                        self.distance_between(a.x, a.y, this_x, this_y, this_dir),
+                    ),
                     weight: self.weight_between(a.x, a.y, this_x, this_y),
                 })),
             })
             .collect();
+        if a.x == 0 && a.y == 0 {
+            dbg!(&v);
+        }
         MyEdgesType(v.into_iter())
     }
 }
@@ -241,7 +274,8 @@ impl PuzzleRun for Part1 {
         let start = MyNode {
             x: 0,
             y: 0,
-            dir: Dir::W,
+            dir_from: Dir::W,
+            dist_from: 0,
         };
         let res = dijkstra(&grid, start, None, |n| *n.weight());
         let mut res_map: HashMap<(usize, usize), Vec<(&MyNode, u16)>> = Default::default();
@@ -276,13 +310,66 @@ impl PuzzleRun for Part1 {
 
 struct Part2;
 
+impl Part2 {
+    fn trace_back(
+        res: &HashMap<MyNode, u16>,
+        by_coord: &HashMap<(usize, usize), Vec<MyNode>>,
+        node: MyNode,
+    ) -> MyNode {
+        let coord = match node.dir_from {
+            Dir::E => (node.x + node.dist_from, node.y),
+            Dir::W => (node.x - node.dist_from, node.y),
+            Dir::N => (node.x, node.y - node.dist_from),
+            Dir::S => (node.x, node.y + node.dist_from),
+        };
+
+        let candidates = by_coord.get(&coord).unwrap();
+        if candidates.len() == 0 {
+            panic!();
+        }
+        let mut best: Option<MyNode> = None;
+        let mut best_score = u16::MAX;
+        for i in 0..candidates.len() {
+            match (node.dir_from, candidates[i].dir_from) {
+                (Dir::E | Dir::W, Dir::N | Dir::S) | (Dir::S | Dir::N, Dir::E | Dir::W) => {
+                    if let Some(&this_score) = res.get(&candidates[i]) {
+                        if this_score < best_score {
+                            best_score = this_score;
+                            best = Some(candidates[i]);
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+        best.unwrap()
+    }
+}
 impl PuzzleRun for Part2 {
     fn input_data(&self) -> anyhow::Result<&str> {
+        /*
         Ok("111111111111
         999999999991
         999999999991
         999999999991
         999999999991")
+            */
+        /*
+        Ok("2413432311323
+        3215453535623
+        3255245654254
+        3446585845452
+        4546657867536
+        1438598798454
+        4457876987766
+        3637877979653
+        4654967986887
+        4564679986453
+        1224686865563
+        2546548887735
+        4322674655533")
+        */
+        read_file("input/day17.txt")
     }
 
     fn run(&self, input: &str) -> String {
@@ -290,11 +377,15 @@ impl PuzzleRun for Part2 {
         let start = MyNode {
             x: 0,
             y: 0,
-            dir: Dir::W,
+            dir_from: Dir::W,
+            dist_from: 0,
         };
         let res = dijkstra(&grid, start, None, |n| *n.weight());
+        let mut coord_map: HashMap<(usize, usize), Vec<MyNode>> = Default::default();
+
         let candidates = res
             .keys()
+            .inspect(|&k| coord_map.entry((k.x, k.y)).or_default().push(*k))
             .filter(|&k| k.x == grid.width - 1 && k.y == grid.height - 1)
             .collect::<Vec<_>>();
         let min = *candidates
@@ -314,12 +405,9 @@ impl PuzzleRun for Part2 {
         while !(node.x == 0 && node.y == 0) {
             path.push(node);
             let maybe_last: Vec<MyNode> = grid
-                .direction_range(node.x, node.y, 4, 11, node.dir)
+                .direction_range(node.x, node.y, 4, 11, node.dir_from)
                 .into_iter()
-                .flat_map(|(x, y)| match node.dir {
-                    Dir::E | Dir::W => vec![MyNode::new(x, y, Dir::N), MyNode::new(x, y, Dir::S)],
-                    Dir::N | Dir::S => vec![MyNode::new(x, y, Dir::E), MyNode::new(x, y, Dir::W)],
-                })
+                .map(|(x, y)| Part2::trace_back(&res, &coord_map, node))
                 .collect();
             let (best_node, best_score): (MyNode, u16) = maybe_last
                 .into_iter()
@@ -343,6 +431,20 @@ mod test {
         println!("{}", Part1::run(&Part1, Part1::input_data(&Part1).unwrap()));
     }
 
+    #[test]
+    fn test_edges() {
+        let g: Grid<u16> = Grid::from_str(
+            "111111111111
+        999999999991
+        999999999991
+        999999999991
+        999999999991",
+        )
+        .unwrap();
+        let n = MyNode::new(0, 0, Dir::W, 0);
+        let e: Vec<MyEdgeRef<_>> = g.edges(n).collect();
+        assert_eq!(e.len(), 7);
+    }
     #[test]
     fn test_part2() {
         println!("{}", Part2::run(&Part2, Part2::input_data(&Part2).unwrap()));
