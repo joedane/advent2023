@@ -1,11 +1,8 @@
-use itertools::Itertools;
+use indextree::{Arena, NodeId};
 use regex::Regex;
 use std::{
-    cell::RefCell,
     collections::HashMap,
     fmt::Display,
-    ops::RangeInclusive,
-    rc::Rc,
     str::{FromStr, Lines},
 };
 
@@ -64,7 +61,7 @@ impl FromStr for Op {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 struct RuleTest {
     category: Category,
     op: Op,
@@ -79,6 +76,22 @@ impl RuleTest {
             test_val,
         }
     }
+
+    fn negate(&self) -> Self {
+        match self.op {
+            Op::Gt => Self {
+                op: Op::Lt,
+                test_val: self.test_val + 1,
+                ..*self
+            },
+            Op::Lt => Self {
+                op: Op::Gt,
+                test_val: self.test_val - 1,
+                ..*self
+            },
+            Op::Jump => panic!(),
+        }
+    }
 }
 struct WorkflowDesc {
     name: String,
@@ -90,6 +103,16 @@ impl WorkflowDesc {
         Self {
             name: name.to_owned(),
             rules,
+        }
+    }
+
+    fn apply_tests(&self, mut source_range: Ranges, rule_idx: usize) -> Ranges {
+        for idx in 0..rule_idx {
+            source_range = source_range.apply(self.rules[idx].test.as_ref().unwrap().negate())
+        }
+        match self.rules[rule_idx].test {
+            Some(test) => source_range.apply(test),
+            None => source_range,
         }
     }
 }
@@ -539,6 +562,64 @@ impl Ranges {
         }
     }
 
+    fn range_for(&self, category: Category) -> (u16, u16) {
+        match category {
+            Category::X => self.x,
+            Category::M => self.m,
+            Category::A => self.a,
+            Category::S => self.s,
+        }
+    }
+
+    fn count_items(&self) -> u64 {
+        u16::max(self.x.1 - self.x.0 + 1, 0) as u64
+            * u16::max(self.m.1 - self.m.0 + 1, 0) as u64
+            * u16::max(self.a.1 - self.a.0 + 1, 0) as u64
+            * u16::max(self.s.1 - self.s.0 + 1, 0) as u64
+    }
+
+    fn with_lb(&self, category: Category, lb: u16) -> Self {
+        match category {
+            Category::X => Self {
+                x: (u16::max(self.x.0, lb), self.x.1),
+                ..*self
+            },
+            Category::M => Self {
+                m: (u16::max(self.m.0, lb), self.m.1),
+                ..*self
+            },
+            Category::A => Self {
+                a: (u16::max(self.a.0, lb), self.a.1),
+                ..*self
+            },
+            Category::S => Self {
+                s: (u16::max(self.s.0, lb), self.s.1),
+                ..*self
+            },
+        }
+    }
+
+    fn with_ub(&self, category: Category, ub: u16) -> Self {
+        match category {
+            Category::X => Self {
+                x: (self.x.0, u16::min(self.x.1, ub)),
+                ..*self
+            },
+            Category::M => Self {
+                m: (self.m.0, u16::min(self.m.1, ub)),
+                ..*self
+            },
+            Category::A => Self {
+                a: (self.a.0, u16::min(self.a.1, ub)),
+                ..*self
+            },
+            Category::S => Self {
+                s: (self.s.0, u16::min(self.s.1, ub)),
+                ..*self
+            },
+        }
+    }
+
     fn from(&self, new_range: (u16, u16), category: Category) -> Self {
         match category {
             Category::X => Self {
@@ -559,80 +640,70 @@ impl Ranges {
             },
         }
     }
-    fn intersect((src_lb, src_ub): (u16, u16), op: Op, test_val: u16) -> Option<(u16, u16)> {
-        match op {
-            Op::Gt => {
-                if test_val >= src_ub {
-                    None
-                } else {
-                    Some((u16::max(src_lb, test_val + 1), src_ub))
-                }
-            }
-            Op::Lt => {
-                if test_val <= src_lb {
-                    None
-                } else {
-                    Some((src_lb, u16::min(src_ub, test_val - 1)))
-                }
-            }
+    fn apply(&self, test: RuleTest) -> Self {
+        match test.op {
+            Op::Gt => self.with_lb(test.category, test.test_val + 1),
+            Op::Lt => self.with_ub(test.category, test.test_val - 1),
             Op::Jump => panic!(),
-        }
-    }
-
-    fn analyze(
-        &self,
-        wf: &WorkflowDesc,
-        wf_labels: &HashMap<String, &WorkflowDesc>,
-        result: &mut Vec<Self>,
-    ) {
-        for rule in wf.rules.iter() {
-            match &rule.test {
-                Some(test) => match rule.target.as_str() {
-                    "A" => {
-                        if let Some(r) = self.apply(test) {
-                            result.push(r);
-                        }
-                    }
-                    "R" => {}
-                    label => {
-                        let wf = wf_labels.get(label).unwrap();
-                        self.analyze(wf, wf_labels, result);
-                    }
-                },
-                None => match rule.target.as_str() {
-                    "A" => result.push(*self),
-                    "R" => {}
-                    label => {
-                        let wf = wf_labels.get(label).unwrap();
-                        self.analyze(wf, wf_labels, result);
-                    }
-                },
-            }
-        }
-    }
-
-    fn apply(&self, test: &RuleTest) -> Option<Self> {
-        match test.category {
-            Category::X => {
-                Self::intersect(self.x, test.op, test.test_val).map(|r| self.from(r, test.category))
-            }
-            Category::M => {
-                Self::intersect(self.m, test.op, test.test_val).map(|r| self.from(r, test.category))
-            }
-            Category::A => {
-                Self::intersect(self.a, test.op, test.test_val).map(|r| self.from(r, test.category))
-            }
-            Category::S => {
-                Self::intersect(self.s, test.op, test.test_val).map(|r| self.from(r, test.category))
-            }
         }
     }
 }
 
 struct Part2;
 
+#[derive(Debug, Clone, Copy)]
+struct RuleRef<'a> {
+    wf: &'a str,
+    index: usize,
+}
+
+impl<'a> RuleRef<'a> {
+    fn new(wf: &'a str, index: usize) -> Self {
+        Self { wf, index }
+    }
+}
+
+impl WorkflowDesc {
+    fn find_rules_with_target(&self, target: &str) -> Vec<RuleRef> {
+        self.rules
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, r)| {
+                if r.target == target {
+                    Some(RuleRef::new(self.name.as_str(), idx))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+fn find_rules_with_target<'a>(wfs: &'a Vec<WorkflowDesc>, target: &'a str) -> Vec<RuleRef<'a>> {
+    wfs.iter()
+        .flat_map(|wf| wf.find_rules_with_target(target))
+        .collect()
+}
+
+#[derive(Debug)]
+enum NodeType<'a> {
+    Workflow(Ranges, RuleRef<'a>),
+    Accept(Ranges),
+    Reject(Ranges),
+}
+
+impl<'a> NodeType<'a> {
+    fn get_ranges(&self) -> Ranges {
+        match (self) {
+            Self::Workflow(ranges, _) => *ranges,
+            Self::Accept(ranges) => *ranges,
+            Self::Reject(ranges) => *ranges,
+        }
+    }
+}
 impl PuzzleRun for Part2 {
     fn input_data(&self) -> anyhow::Result<&str> {
+        /*
         Ok("px{a<2006:qkq,m>2090:A,rfg}
          pv{a>1716:R,A}
          lnx{m>1548:A,A}
@@ -650,20 +721,102 @@ impl PuzzleRun for Part2 {
          {x=2036,m=264,a=79,s=2244}
          {x=2461,m=1339,a=466,s=291}
          {x=2127,m=1623,a=2188,s=1013}")
+         */
+        read_file("input/day19.txt")
     }
 
     fn run(&self, input: &str) -> String {
         let mut lines = input.lines();
         let wf_descs = parse_workflows(&mut lines);
-        let wfs_by_labels: HashMap<String, &WorkflowDesc> =
-            wf_descs.iter().map(|wf| (wf.name.clone(), wf)).collect();
+        let wfs_by_labels: HashMap<&str, &WorkflowDesc> =
+            wf_descs.iter().map(|wf| (wf.name.as_str(), wf)).collect();
 
-        format!("")
+        let root: &mut Arena<NodeType> = &mut Arena::new();
+        let mut wf_stack: Vec<(&WorkflowDesc, indextree::NodeId)> = Vec::new();
+        let start = *wfs_by_labels.get("in").unwrap();
+        let start_node = root.new_node(NodeType::Workflow(Ranges::new(), RuleRef::new("in", 0)));
+        wf_stack.push((start, start_node));
+        while let Some((wf, node)) = wf_stack.pop() {
+            let current_range = root.get(node).unwrap().get().get_ranges();
+            for (index, r) in wf.rules.iter().enumerate() {
+                match &r.test {
+                    Some(test) => {
+                        let target_name = r.target.as_str();
+                        match target_name {
+                            "A" => {
+                                node.append_value(
+                                    NodeType::Accept(wf.apply_tests(current_range, index)),
+                                    root,
+                                );
+                            }
+                            "R" => {
+                                node.append_value(
+                                    NodeType::Reject(wf.apply_tests(current_range, index)),
+                                    root,
+                                );
+                            }
+                            name => {
+                                let target = *wfs_by_labels.get(target_name).unwrap();
+                                let node = node.append_value(
+                                    NodeType::Workflow(
+                                        wf.apply_tests(current_range, index),
+                                        RuleRef::new(&target.name, index),
+                                    ),
+                                    root,
+                                );
+                                wf_stack.push((target, node));
+                            }
+                        }
+                    }
+                    None => match r.target.as_str() {
+                        "A" => {
+                            node.append_value(
+                                NodeType::Accept(wf.apply_tests(current_range, index)),
+                                root,
+                            );
+                        }
+                        "R" => {
+                            node.append_value(
+                                NodeType::Reject(wf.apply_tests(current_range, index)),
+                                root,
+                            );
+                        }
+                        next_wf => {
+                            let target = *wfs_by_labels.get(next_wf).unwrap();
+                            let node = node.append_value(
+                                NodeType::Workflow(
+                                    wf.apply_tests(current_range, index),
+                                    RuleRef::new(&target.name, index),
+                                ),
+                                root,
+                            );
+                            wf_stack.push((target, node));
+                        }
+                    },
+                }
+            }
+        }
+        println!("{} nodes", root.count());
+        //println!("{:?}", start_node.debug_pretty_print(root));
+        let total: u64 = root
+            .iter()
+            .filter_map(|n| {
+                let node = n.get();
+                match node {
+                    NodeType::Workflow(_, _) => None,
+                    NodeType::Accept(range) => Some(range.count_items()),
+                    NodeType::Reject(_) => None,
+                }
+            })
+            .sum();
+        format!("total: {}", total)
     }
 }
 
 #[cfg(test)]
 mod test {
+
+    use num_traits::Pow;
 
     use super::*;
 
@@ -726,27 +879,36 @@ mod test {
     fn test_ranges() {
         let r = Ranges::new();
         let test = RuleTest::new(Category::A, Op::Lt, 2006);
-        let r = r.apply(&test);
+        let r = r.apply(test);
         println!("{:?}", r);
 
         let test = RuleTest::new(Category::X, Op::Gt, 1000);
-        let r = Ranges::new().apply(&test);
+        let r = Ranges::new().apply(test);
         println!("{:?}", r);
 
         let test = RuleTest::new(Category::X, Op::Lt, 1001);
-        let r = r.unwrap().apply(&test);
+        let r = r.apply(test);
         println!("{:?}", r);
     }
 
     #[test]
-    fn test_analyze() {
-        let s = "in{a<2000:R,m>2090:A,R}";
+    fn test_find_targets() {
+        let input = Part2::input_data(&Part2).unwrap();
+        let wf_descs = parse_workflows(&mut input.lines());
 
-        let wfs = parse_workflows(&mut s.lines());
-        let wfs_by_labels: HashMap<String, &WorkflowDesc> =
-            wfs.iter().map(|wf| (wf.name.clone(), wf)).collect();
-        let mut v = vec![];
-        Ranges::new().analyze(wfs_by_labels.get("in").unwrap(), &wfs_by_labels, &mut v);
-        println!("{:?}", v);
+        let t = find_rules_with_target(&wf_descs, "A");
+        println!("{:?}", t);
+    }
+
+    #[test]
+    fn test_range_count() {
+        let r = Ranges::new();
+        assert_eq!(r.count_items(), 4000_u64.pow(4));
+        let r = r.with_ub(Category::A, 2000);
+        assert_eq!(r.count_items(), 4000_u64.pow(4) / 2)
+    }
+    #[test]
+    fn test_part2() {
+        println!("{}", Part2::run(&Part2, Part2::input_data(&Part2).unwrap()));
     }
 }
