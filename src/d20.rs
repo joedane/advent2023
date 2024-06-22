@@ -101,7 +101,7 @@ impl SignalQueue {
         self.low_count * self.high_count
     }
 
-    fn send(&mut self, source: NodeIndex, pulse: Pulse, graph: &Graph<&str, (), Directed>) {
+    fn send(&mut self, source: NodeIndex, pulse: Pulse, graph: &Graph<String, (), Directed>) {
         let mut neighbors: Vec<NodeIndex> = graph.neighbors_directed(source, Outgoing).collect();
         neighbors.reverse();
 
@@ -151,10 +151,29 @@ impl PuzzleRun for Part1 {
 
     fn run<'a>(&self, input: &'a str) -> String {
         let v: Vec<ModDesc<'a>> = input.lines().map(|s| s.into()).collect();
-        let mut graph: Graph<&str, (), Directed> = Graph::new();
+        let mut graph: Graph<String, (), Directed> = Graph::new();
         let mut node_map: HashMap<&str, (NodeIndex, ModType, Vec<&'a str>)> = v
             .into_iter()
-            .map(|d| (d.label, (graph.add_node(d.label), d.mod_type, d.targets)))
+            .map(|d| {
+                (
+                    d.label,
+                    (
+                        graph.add_node({
+                            let mut s = match d.mod_type {
+                                ModType::Broadcast => "",
+                                ModType::FlipFlop => "%",
+                                ModType::Conjunction => "&",
+                                ModType::Output => "",
+                            }
+                            .to_string();
+                            s.push_str(d.label);
+                            s
+                        }),
+                        d.mod_type,
+                        d.targets,
+                    ),
+                )
+            })
             .collect();
 
         let mut v = vec![];
@@ -168,7 +187,10 @@ impl PuzzleRun for Part1 {
             }
         }
         for label in v {
-            node_map.insert(label, (graph.add_node(label), ModType::Output, vec![]));
+            node_map.insert(
+                label,
+                (graph.add_node(label.to_string()), ModType::Output, vec![]),
+            );
         }
 
         let mut node_data: HashMap<NodeIndex, Module> = node_map
@@ -189,8 +211,12 @@ impl PuzzleRun for Part1 {
                 graph.add_edge(*idx, node_map.get(target).unwrap().0, ());
             }
         }
-        let button = graph.add_node("button");
+        let button = graph.add_node("button".to_string());
         graph.add_edge(button, node_map.get("broadcaster").unwrap().0, ());
+
+        println!("{:?}", Dot::new(&graph));
+
+        panic!();
 
         // set up conjunction module inputs
         let mut source_map: HashMap<NodeIndex, Vec<NodeIndex>> = Default::default();
@@ -272,6 +298,31 @@ mod test {
         assert_eq!(v.len(), 5);
     }
 
+    #[test]
+    fn test_parse2() {
+        let input = Part1::input_data(&Part1).unwrap();
+
+        let v: Vec<ModDesc<'_>> = input.lines().map(|s| s.into()).collect();
+        let mut graph: Graph<&str, (), Directed> = Graph::new();
+        let mut node_map: HashMap<&str, (NodeIndex, ModType, Vec<&'_ str>)> = v
+            .into_iter()
+            .map(|d| (d.label, (graph.add_node(d.label), d.mod_type, d.targets)))
+            .collect();
+
+        let mut v = vec![];
+
+        for (label, (idx, mod_type, targets)) in &node_map {
+            for &t in targets {
+                match node_map.get(t) {
+                    Some(_) => {}
+                    None => v.push(t),
+                }
+            }
+        }
+        for label in v {
+            node_map.insert(label, (graph.add_node(label), ModType::Output, vec![]));
+        }
+    }
     #[test]
     fn test_part1() {
         println!("{}", Part1::run(&Part1, Part1::input_data(&Part1).unwrap()));
