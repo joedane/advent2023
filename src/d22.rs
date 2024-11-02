@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use regex::Regex;
 
 use super::{read_file, PuzzleRun};
@@ -23,6 +24,7 @@ impl Point {
 
 #[derive(Debug)]
 struct Obj {
+    idx: u16,
     label: String,
     start: Point,
     end: Point,
@@ -78,9 +80,15 @@ impl Obj {
     fn new(label: String, start: Point, end: Point) -> Self {
         if start.x != end.x {
             if start.x < end.x {
-                Self { label, start, end }
+                Self {
+                    idx: 0,
+                    label,
+                    start,
+                    end,
+                }
             } else {
                 Self {
+                    idx: 0,
                     label,
                     start: end,
                     end: start,
@@ -88,9 +96,15 @@ impl Obj {
             }
         } else if start.y != end.y {
             if start.y < end.y {
-                Self { label, start, end }
+                Self {
+                    idx: 0,
+                    label,
+                    start,
+                    end,
+                }
             } else {
                 Self {
+                    idx: 0,
                     label,
                     start: end,
                     end: start,
@@ -98,9 +112,15 @@ impl Obj {
             }
         } else if start.z != end.z {
             if start.z < end.z {
-                Self { label, start, end }
+                Self {
+                    idx: 0,
+                    label,
+                    start,
+                    end,
+                }
             } else {
                 Self {
+                    idx: 0,
                     label,
                     start: end,
                     end: start,
@@ -108,7 +128,12 @@ impl Obj {
             }
         } else {
             // start and end are the same point
-            Self { label, start, end }
+            Self {
+                idx: 0,
+                label,
+                start,
+                end,
+            }
         }
     }
 
@@ -120,9 +145,17 @@ impl Obj {
         }
     }
 
-    fn drop(&mut self) {
+    fn can_drop(&self, grid: &Grid) -> bool {
+        self.points()
+            .all(|p| p.z > 1 && grid.at(p.x, p.y, p.z - 1) == 0)
+    }
+    fn drop(&mut self, grid: &mut Grid) {
         self.start.z -= 1;
         self.end.z -= 1;
+        for p in self.points() {
+            grid.set(p.x, p.y, p.z, 0);
+            grid.set(p.x, p.y, p.z, self.idx);
+        }
     }
 }
 
@@ -134,6 +167,7 @@ impl std::str::FromStr for Obj {
         if let Some(c) = r.captures(s) {
             let (label, [x_1, y_1, z_1, x_2, y_2, z_2]) = c.extract();
             Ok(Obj {
+                idx: 0,
                 label: label.to_string(),
                 start: Point::new(
                     x_1.parse().unwrap(),
@@ -154,12 +188,45 @@ impl std::str::FromStr for Obj {
 
 #[derive(Debug)]
 struct Grid {
-    max_z: Vec<Vec<u16>>,
-    x_offset: u16,
-    y_offset: u16,
+    data: Box<[u16]>,
+    x_offset: usize,
+    y_offset: usize,
+    z_offset: usize,
+    x_size: usize,
+    y_size: usize,
+    z_size: usize,
 }
 
 impl Grid {
+    fn _idx(
+        x_offset: usize,
+        y_offset: usize,
+        z_offset: usize,
+        x_size: usize,
+        y_size: usize,
+        z_size: usize,
+        x: u16,
+        y: u16,
+        z: u16,
+    ) -> usize {
+        (z as usize - z_offset) * x_size * y_size
+            + (y as usize - y_offset) * x_size
+            + (x as usize - x_offset)
+    }
+
+    fn idx(&self, x: u16, y: u16, z: u16) -> usize {
+        Self::_idx(
+            self.x_offset,
+            self.y_offset,
+            self.z_offset,
+            self.x_size,
+            self.y_size,
+            self.z_size,
+            x,
+            y,
+            z,
+        )
+    }
     fn new(objs: &Vec<Obj>) -> Self {
         let Some((ll, ur)) = objs
             .iter()
@@ -168,63 +235,75 @@ impl Grid {
                     Point::new(
                         u16::min(o.start.x, o.end.x),
                         u16::min(o.start.y, o.end.y),
-                        0,
+                        u16::min(o.start.z, o.end.z),
                     ),
                     Point::new(
                         u16::max(o.start.x, o.end.x),
                         u16::max(o.start.y, o.end.y),
-                        0,
+                        u16::max(o.start.z, o.end.z),
                     ),
                 )
             })
             .reduce(|acc, v| {
                 (
-                    Point::new(u16::min(acc.0.x, v.0.x), u16::min(acc.0.y, v.0.y), 0),
-                    Point::new(u16::max(acc.1.x, v.1.x), u16::max(acc.1.y, v.1.y), 0),
+                    Point::new(
+                        u16::min(acc.0.x, v.0.x),
+                        u16::min(acc.0.y, v.0.y),
+                        u16::min(acc.0.z, v.0.z),
+                    ),
+                    Point::new(
+                        u16::max(acc.1.x, v.1.x),
+                        u16::max(acc.1.y, v.1.y),
+                        u16::max(acc.1.z, v.1.z),
+                    ),
                 )
             })
         else {
             panic!()
         };
 
-        let mut max_z: Vec<Vec<u16>> = vec![];
-        assert!(ur.x > ll.x);
-        assert!(ur.y > ll.y);
-        max_z.resize_with((ur.y - ll.y) as usize + 1, || {
-            let mut v = vec![];
-            v.resize((ur.x - ll.x) as usize + 1, 0);
-            v
-        });
-
-        for obj in objs.iter() {
+        let (x_size, y_size, z_size) = (
+            (ur.x - ll.x) as usize + 1,
+            (ur.y - ll.y) as usize + 1,
+            (ur.z - ll.z) as usize + 1,
+        );
+        let mut v: Vec<u16> = Vec::with_capacity(x_size * y_size * z_size);
+        v.extend(std::iter::repeat(0).take(x_size * y_size * z_size));
+        for (idx, obj) in objs.iter().enumerate() {
+            let idx: u16 = idx.try_into().unwrap();
             for p in obj.points() {
-                let (xx, yy) = ((p.x - ll.x) as usize, (p.y - ll.y) as usize);
-                max_z[yy][xx] = u16::max(max_z[yy][xx], p.z);
+                v[Self::_idx(
+                    ll.x as usize,
+                    ll.y as usize,
+                    ll.z as usize,
+                    x_size,
+                    y_size,
+                    z_size,
+                    p.x,
+                    p.y,
+                    p.z,
+                )] = idx;
             }
         }
 
         Self {
-            max_z,
-            x_offset: ll.x,
-            y_offset: ll.y,
+            data: v.into_boxed_slice(),
+            x_offset: ll.x as usize,
+            y_offset: ll.y as usize,
+            z_offset: ll.z as usize,
+            x_size,
+            y_size,
+            z_size,
         }
     }
 
-    fn get_max(&self, y: u16, x: u16) -> u16 {
-        self.max_z[(y - self.y_offset) as usize][(x - self.x_offset) as usize]
+    fn at(&self, x: u16, y: u16, z: u16) -> u16 {
+        let id = self.idx(x, y, z);
+        self.data[self.idx(x, y, z)]
     }
 
-    fn set_max(&mut self, y: u16, x: u16, val: u16) {
-        self.max_z[(y - self.y_offset) as usize][(x - self.x_offset) as usize] = val;
-    }
-}
-fn display_grid(grid: &Vec<Vec<u16>>) {
-    for i in 0..grid.len() {
-        print!("|");
-        for j in 0..grid[i].len() {
-            print!("{:3}|", grid[i][j])
-        }
-        println!("");
+    fn set(&mut self, x: u16, y: u16, z: u16, val: u16) {
+        self.data[self.idx(x, y, z)] = val;
     }
 }
 impl PuzzleRun for Part1 {
@@ -241,22 +320,24 @@ impl PuzzleRun for Part1 {
     }
 
     fn run(&self, input: &str) -> String {
-        let mut objs: Vec<Obj> = input.lines().map(|s| s.parse().unwrap()).collect();
-        let mut max_z = Grid::new(&objs);
-        println!("{:?}", max_z);
-        /*
-        for idx in grounded_idx {
-            objs.swap_remove(idx);
-        }
-        */
+        let mut objs: Vec<Obj> = input
+            .lines()
+            .enumerate()
+            .map(|(idx, s)| {
+                let mut obj: Obj = s.parse().unwrap();
+                let idx: u16 = idx.try_into().unwrap();
+                obj.idx = idx + 1;
+                obj
+            })
+            .collect();
         objs.sort_by_key(|o| u16::min(o.start.z, o.end.z) as i32);
+        let mut grid = Grid::new(&objs);
+
         for o in objs.iter_mut() {
-            while o.points().all(|p| p.z > max_z.get_max(p.y, p.x)) {
+            while o.can_drop(&grid) {
                 println!("dropping obj [{}]", o.label);
-                o.drop();
+                o.drop(&mut grid);
             }
-            o.points()
-                .for_each(|p| max_z.set_max(p.y, p.x, u16::max(p.z, max_z.get_max(p.y, p.x))));
         }
 
         "FOO".to_string()
@@ -275,6 +356,25 @@ mod test {
         println!("{}", Part1.run(Part1.input_data().unwrap()));
     }
 
+    #[test]
+    fn test_grid() {
+        let mut objs: Vec<Obj> = Part1
+            .input_data()
+            .unwrap()
+            .lines()
+            .enumerate()
+            .map(|(idx, s)| {
+                let mut obj: Obj = s.parse().unwrap();
+                let idx: u16 = idx.try_into().unwrap();
+                obj.idx = idx + 1;
+                obj
+            })
+            .collect();
+        objs.sort_by_key(|o| u16::min(o.start.z, o.end.z) as i32);
+        let grid = Grid::new(&objs);
+
+        assert_eq!(grid.at(1, 0, 1), 1);
+    }
     #[test]
     fn test_point_iter() {
         let o = Obj::new(
