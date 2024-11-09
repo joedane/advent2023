@@ -189,43 +189,18 @@ impl std::str::FromStr for Obj {
 #[derive(Debug)]
 struct Grid {
     data: Box<[u16]>,
-    x_offset: usize,
-    y_offset: usize,
-    z_offset: usize,
     x_size: usize,
     y_size: usize,
     z_size: usize,
 }
 
 impl Grid {
-    fn _idx(
-        x_offset: usize,
-        y_offset: usize,
-        z_offset: usize,
-        x_size: usize,
-        y_size: usize,
-        z_size: usize,
-        x: u16,
-        y: u16,
-        z: u16,
-    ) -> usize {
-        (z as usize - z_offset) * x_size * y_size
-            + (y as usize - y_offset) * x_size
-            + (x as usize - x_offset)
+    fn _idx(x_size: usize, y_size: usize, z_size: usize, x: u16, y: u16, z: u16) -> usize {
+        (z as usize) * x_size * y_size + (y as usize) * x_size + (x as usize)
     }
 
     fn idx(&self, x: u16, y: u16, z: u16) -> usize {
-        Self::_idx(
-            self.x_offset,
-            self.y_offset,
-            self.z_offset,
-            self.x_size,
-            self.y_size,
-            self.z_size,
-            x,
-            y,
-            z,
-        )
+        Self::_idx(self.x_size, self.y_size, self.z_size, x, y, z)
     }
     fn new(objs: &Vec<Obj>) -> Self {
         let Some((ll, ur)) = objs
@@ -262,35 +237,17 @@ impl Grid {
             panic!()
         };
 
-        let (x_size, y_size, z_size) = (
-            (ur.x - ll.x) as usize + 1,
-            (ur.y - ll.y) as usize + 1,
-            (ur.z - ll.z) as usize + 1,
-        );
+        let (x_size, y_size, z_size) = (ur.x as usize + 1, ur.y as usize + 1, ur.z as usize + 1);
         let mut v: Vec<u16> = Vec::with_capacity(x_size * y_size * z_size);
         v.extend(std::iter::repeat(0).take(x_size * y_size * z_size));
-        for (idx, obj) in objs.iter().enumerate() {
-            let idx: u16 = idx.try_into().unwrap();
-            for p in obj.points() {
-                v[Self::_idx(
-                    ll.x as usize,
-                    ll.y as usize,
-                    ll.z as usize,
-                    x_size,
-                    y_size,
-                    z_size,
-                    p.x,
-                    p.y,
-                    p.z,
-                )] = idx;
+        for o in objs {
+            for p in o.points() {
+                v[Self::_idx(x_size, y_size, z_size, p.x, p.y, p.z)] = o.idx;
             }
         }
 
         Self {
             data: v.into_boxed_slice(),
-            x_offset: ll.x as usize,
-            y_offset: ll.y as usize,
-            z_offset: ll.z as usize,
             x_size,
             y_size,
             z_size,
@@ -304,6 +261,15 @@ impl Grid {
 
     fn set(&mut self, x: u16, y: u16, z: u16, val: u16) {
         self.data[self.idx(x, y, z)] = val;
+    }
+
+    fn print_z(&self, z: u16) {
+        for y in (0u16..self.y_size as u16).rev() {
+            for x in (0u16..self.x_size as u16).rev() {
+                print!("\t|{}|\t", self.at(x, y, z));
+            }
+            println!("");
+        }
     }
 }
 impl PuzzleRun for Part1 {
@@ -370,8 +336,18 @@ mod test {
                 obj
             })
             .collect();
+        for o in &objs {
+            println!("{}: {}", o.label, o.idx);
+        }
         objs.sort_by_key(|o| u16::min(o.start.z, o.end.z) as i32);
         let grid = Grid::new(&objs);
+
+        println!("z = 0");
+        grid.print_z(0);
+        println!("z = 1");
+        grid.print_z(1);
+        println!("z = 2");
+        grid.print_z(2);
 
         assert_eq!(grid.at(1, 0, 1), 1);
     }
